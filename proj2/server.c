@@ -17,6 +17,7 @@
 int main() {
     int sockfd;
     char buffer[524] = {0};
+    int finSent = 0;
     char *hello = "Hello from server";
     struct sockaddr_in servaddr, cliaddr;
 
@@ -42,6 +43,7 @@ int main() {
         exit(1);
     }
     // initializing
+    finSent = 0;
     char header[12] = {0};
     char seqNum[5] = "221zz";
     char ackNum[5] = "00000";
@@ -103,6 +105,8 @@ int main() {
             printf("RECV %i %i SYN FIN ACK\n", intAckNum, intSeqNum);
         while(1) // wait for client to send first handshake
         {
+            if (finSent == 1)
+                break;
             // check if client sent first handshake
             if (buffer[11] == 'b') // syn
             {
@@ -166,7 +170,12 @@ int main() {
                             MSG_WAITALL, ( struct sockaddr *) &cliaddr,
                             &len);
                     buffer[n] = '\0';
-
+                    if (finSent == 1 && buffer[11] == 'a')
+                    {
+                        // check if the seq and ack numbers are correct
+                        fprintf(stderr, "bye client :( \n");
+                        break;
+                    }
                     if (buffer[11] == 'a') // if client sends an ACK
                     {
                         fprintf(stderr, "Client3 : %s\n", buffer);
@@ -211,6 +220,7 @@ int main() {
                         }
                         int fwriteLen = fwrite(&fileBuff, 1, fileBuffSize, fp);
                         fprintf(stderr, "wrote to file %i bytes: %s\n", fwriteLen, fileBuff);
+                        fprintf(stderr, "sketych last byte: %c\n", fileBuff[fileBuffSize-1]);
                         fclose(fp);
                     } // end if ack
 
@@ -312,6 +322,7 @@ int main() {
                             sendto(sockfd, (const char *)header, 12, MSG_CONFIRM, (const struct sockaddr *) &cliaddr, len);
                             printf("actually sent: %s\n", header);
                             printf("SEND %i %i FIN\n", intSeqNum, intAckNum);
+                            finSent = 1;
                         }
 
                         prevIntSeqNum = intSeqNum;

@@ -13,7 +13,11 @@
 #define PORT     8080
 #define MAXLINE 1024
 
-// Driver code
+void printRecv(char * pbuffer);
+int getAck(char * pbuffer);
+int getSeq(char * pbuffer);
+char * makeHeader(int pintSeqNum, int pintAckNum, char pflags);
+
 int main() {
     int sockfd;
     char buffer[524] = {0};
@@ -67,6 +71,12 @@ int main() {
 
     while(1)
     {
+        finSent = 0;
+        memcpy(seqNum, "221zz", 5);
+        bzero(modSeqNum, 6);
+        memcpy(modSeqNum, seqNum, 5);
+        strncat(modSeqNum, &z, 1);
+
         printf("Listening for first handshake...\n");
         int len, n;
 
@@ -126,20 +136,20 @@ int main() {
                 strncat(modAckNum, &flags, 1);
                 sprintf(header, "%s%s", modSeqNum, modAckNum);
                 int sir = 0;
-                fprintf(stderr, "crustys header: %s\n", header);
-                fprintf(stderr, "0 spot: %c\n", header[0]);
-                fprintf(stderr, "1 spot: %c\n", header[1]);
-                fprintf(stderr, "2 spot: %c\n", header[2]);
-                fprintf(stderr, "3 spot: %c\n", header[3]);
-                fprintf(stderr, "4 spot: %c\n", header[4]);
-                fprintf(stderr, "5 spot: %c\n", header[5]);
-                fprintf(stderr, "6 spot: %c\n", header[6]);
-                fprintf(stderr, "7 spot: %c\n", header[7]);
-                fprintf(stderr, "8 spot: %c\n", header[8]);
-                fprintf(stderr, "9 spot: %c\n", header[9]);
-                fprintf(stderr, "10 spot: %c\n", header[10]);
-                fprintf(stderr, "11 spot: %c\n", header[11]);
-                fprintf(stderr, "12 spot: %c\n", header[12]);
+                // fprintf(stderr, "crustys header: %s\n", header);
+                // fprintf(stderr, "0 spot: %c\n", header[0]);
+                // fprintf(stderr, "1 spot: %c\n", header[1]);
+                // fprintf(stderr, "2 spot: %c\n", header[2]);
+                // fprintf(stderr, "3 spot: %c\n", header[3]);
+                // fprintf(stderr, "4 spot: %c\n", header[4]);
+                // fprintf(stderr, "5 spot: %c\n", header[5]);
+                // fprintf(stderr, "6 spot: %c\n", header[6]);
+                // fprintf(stderr, "7 spot: %c\n", header[7]);
+                // fprintf(stderr, "8 spot: %c\n", header[8]);
+                // fprintf(stderr, "9 spot: %c\n", header[9]);
+                // fprintf(stderr, "10 spot: %c\n", header[10]);
+                // fprintf(stderr, "11 spot: %c\n", header[11]);
+                // fprintf(stderr, "12 spot: %c\n", header[12]);
                 for (int i = 0; i <= 12; i++)
                 {
                     if (i == 5 && header[i] != 'z')
@@ -173,12 +183,13 @@ int main() {
                     if (finSent == 1 && buffer[11] == 'a')
                     {
                         // check if the seq and ack numbers are correct
+                        printRecv(buffer);
                         fprintf(stderr, "bye client :( \n");
                         break;
                     }
                     if (buffer[11] == 'a') // if client sends an ACK
                     {
-                        fprintf(stderr, "Client3 : %s\n", buffer);
+                        //fprintf(stderr, "Client3 : %s\n", buffer);
                         char fileBuff[512] = {0};
                         int c = 0;
                         fprintf(stderr, "this is n: %i\n", n);
@@ -198,7 +209,7 @@ int main() {
                         }
 
                         char buf[100] = "1.file";
-                        FILE *fp = fopen("1.file" , "w");
+                        FILE *fp = fopen("1.file" , "a");
                         int errnum;
                         printf("hiiiiii\n");
                         char mode[] = "0777";
@@ -219,8 +230,8 @@ int main() {
                             exit(1);
                         }
                         int fwriteLen = fwrite(&fileBuff, 1, fileBuffSize, fp);
-                        fprintf(stderr, "wrote to file %i bytes: %s\n", fwriteLen, fileBuff);
-                        fprintf(stderr, "sketych last byte: %c\n", fileBuff[fileBuffSize-1]);
+                        //fprintf(stderr, "wrote to file %i bytes: %s\n", fwriteLen, fileBuff);
+                        //fprintf(stderr, "sketych last byte: %c\n", fileBuff[fileBuffSize-1]);
                         fclose(fp);
                     } // end if ack
 
@@ -338,3 +349,106 @@ int main() {
 }
 
 // function that will take in the buffer, parse the sequence number, increment and return as ack
+void printRecv(char* pbuffer)
+{
+    char pmodAckNum[6];
+    bzero(pmodAckNum, 6);
+    for (int i = 0; i < 5; i++)
+    {
+        if (pbuffer[i] != 'z') //if digit
+            strncat(pmodAckNum, &pbuffer[i], 1); // save all digits into modSeqNum
+    }
+    int pintAckNum = atoi(pmodAckNum); // turn to int; get incremented in string form
+    char pmodSeqNum[6];
+    bzero(pmodSeqNum, 6);
+    for (int i = 6; i < 12; i++)
+    {
+        if (pbuffer[i] != 'z') //if digit
+            strncat(pmodSeqNum, &pbuffer[i], 1); // save all digits into modSeqNum
+    }
+    int pintSeqNum = atoi(pmodSeqNum); // turn to int; get incremented in string form
+    // a = ACK
+    // b = SYN
+    // c = FIN
+    // d = ACK, SYN
+    // e = ACK, FIN
+    // f = SYN, FIN
+    // g = ACK, SYN, FIN
+    if (pbuffer[11] == 'a')
+        printf("RECV %i %i ACK\n", pintAckNum, pintSeqNum);
+    if (pbuffer[11] == 'b')
+        printf("RECV %i %i SYN\n", pintAckNum, pintSeqNum);
+    if (pbuffer[11] == 'c')
+        printf("RECV %i %i FIN\n", pintAckNum, pintSeqNum);
+    if (pbuffer[11] == 'd')
+        printf("RECV %i %i SYN ACK\n", pintAckNum, pintSeqNum);
+    if (pbuffer[11] == 'e')
+        printf("RECV %i %i FIN ACK\n", pintAckNum, pintSeqNum);
+    if (pbuffer[11] == 'f')
+        printf("RECV %i %i SYN FIN\n", pintAckNum, pintSeqNum);
+    if (pbuffer[11] == 'g')
+        printf("RECV %i %i SYN FIN ACK\n", pintAckNum, pintSeqNum);
+}
+
+int getAck(char * pbuffer)
+{
+    char pmodAckNum[6];
+    bzero(pmodAckNum, 6);
+    for (int i = 0; i < 5; i++)
+    {
+        if (pbuffer[i] != 'z') //if digit
+            strncat(pmodAckNum, &pbuffer[i], 1); // save all digits into modSeqNum
+    }
+    int pintAckNum = atoi(pmodAckNum); // turn to int; get incremented in string form
+    return pintAckNum;
+}
+
+int getSeq(char *pbuffer)
+{
+    char pmodSeqNum[6];
+    bzero(pmodSeqNum, 6);
+    for (int i = 6; i < 12; i++)
+    {
+        if (pbuffer[i] != 'z') //if digit
+            strncat(pmodSeqNum, &pbuffer[i], 1); // save all digits into modSeqNum
+    }
+    int pintSeqNum = atoi(pmodSeqNum); // turn to int; get incremented in string form
+    return pintSeqNum;
+}
+
+char * makeHeader(int pintSeqNum, int pintAckNum, char pflags)
+{
+    char *pheader = malloc(13);
+    //char pheader[12] = {0};
+    bzero(pheader, 12);
+    char pseqNum[5];
+    bzero(pseqNum, 5);
+    int pseqNumLen = sprintf(pseqNum, "%i", pintSeqNum);
+    char packNum[5];
+    bzero(packNum, 5);
+    int packNumLen = sprintf(packNum, "%i", pintAckNum);
+    char pmodSeqNum[6];
+    bzero(pmodSeqNum, 6);
+    memcpy(pmodSeqNum, pseqNum, 5);
+    char pmodAckNum[6];
+    bzero(pmodAckNum, 6);
+    memcpy(pmodAckNum, packNum, 5);
+    // a = ACK
+    // b = SYN
+    // c = FIN
+    // d = ACK, SYN
+    // e = ACK, FIN
+    // f = SYN, FIN
+    // g = ACK, SYN, FIN
+    char z = 'z';
+    int pnumZ = 5 - pseqNumLen;
+    for (int i = 0; i < pnumZ; i++)
+        strncat(pmodSeqNum, &z, 1);
+    strncat(pmodSeqNum, &z, 1);
+    int pnumZA = 5 - packNumLen;
+    for (int i = 0; i < pnumZA; i++)
+        strncat(pmodAckNum, &z, 1);
+    strncat(pmodAckNum, &pflags, 1);
+    sprintf(pheader, "%s%s", pmodSeqNum, pmodAckNum);
+    return strdup(&pheader[0]);
+}

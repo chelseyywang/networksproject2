@@ -50,26 +50,6 @@ int main() {
     char header[12] = {0};
     bzero(header, 12);
     memcpy(header, makeHeader(number, 0, 'b'), 12);
-    // char seqNum[5];
-    // int seqNumLen = sprintf(seqNum, "%i", number);
-    // int intAckNum = 0;
-    // char ackNum[5];
-    // int ackNumLen = sprintf(ackNum, "%i", intAckNum);
-    // char modSeqNum[6];
-    // memcpy(modSeqNum, seqNum, 5);
-    // char modAckNum[6];
-    // memcpy(modAckNum, ackNum, 5);
-    // char z = 'z';
-    // char flags = 'b';
-    // int numZ = 5 - seqNumLen;
-    // for (int i = 0; i < numZ; i++)
-    //     strncat(modSeqNum, &z, 1);
-    // strncat(modSeqNum, &z, 1);
-    // int numZA = 5 - ackNumLen;
-    // for (int i = 0; i < numZA; i++)
-    //     strncat(modAckNum, &z, 1);
-    // strncat(modAckNum, &flags, 1);
-    // sprintf(header, "%s%s", modSeqNum, modAckNum);
 
     // while(1)
     // {
@@ -96,7 +76,6 @@ int main() {
             if (buffer[11] == 'd')
             {
                 // send ack + data
-                //flags = 'a';
                 // prepping msg
                 int intAckNum = getAck(buffer);
                 intAckNum = intAckNum + 1;
@@ -106,30 +85,9 @@ int main() {
                 bzero(header, 12);
                 memcpy(header, makeHeader(intSeqNum, intAckNum, 'a'), 12);
 
-                // int ackNumLen = sprintf(ackNum, "%i", intAckNum); // turn int to string seqNum; get its length
-                // int numZ = 5 - ackNumLen;
-                // bzero(modAckNum, 6);
-                // memcpy(modAckNum, ackNum, ackNumLen);
-
-
-
-                // int seqNumLen = sprintf(seqNum, "%i", intSeqNum); // turn int to string seqNum; get its length
-                // int numSZ = 5 - seqNumLen;
-                // bzero(modSeqNum, 6);
-                // memcpy(modSeqNum, seqNum, seqNumLen);
-                // for (int i = 0; i < numZ; i++)
-                //     strncat(modAckNum, &z, 1); // add correct amt of Z's
-                // for (int i = 0; i < numSZ; i++)
-                //     strncat(modSeqNum, &z, 1); // add correct amt of Z's
-                // bzero(header, 12);
-                // strncat(modSeqNum, &z, 1);
-                // strncat(modAckNum, &flags, 1);
-                // sprintf(header, "%s%s", modSeqNum, modAckNum);
-
-
                 // trying to send a whole a$$ file
                 char content[512]={0};
-                FILE *fp = fopen("binaryfile", "r");
+                FILE *fp = fopen("big.txt", "r");
                 if (fp == NULL)
                 {
                     fprintf(stderr, "Unable to open requested file\n");
@@ -139,10 +97,14 @@ int main() {
                 fseek(fp, 0L, SEEK_END);
                 int wholeSize=ftell(fp);
                 fseek(fp,prev,SEEK_SET); //go back to where we were
+
+                // playring round
+                //fseek(fp,3,SEEK_SET);
+
                 fprintf(stderr, "Whole file's size: %i\n", wholeSize);
                 int contentLen = fread(content, sizeof(char), 512, fp);
                 //sendto(sockfd, (const char *) content, contentLen, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
-                printf("cliennt sent %i bytes: %s\n", contentLen, content);
+                //printf("cliennt sent %i bytes: %s\n", contentLen, content);
 
                 char tempBuff[524] = {0};
                 //int tempBuffLen = sprintf(tempBuff, "%s%s", header, content);
@@ -159,61 +121,28 @@ int main() {
 
 
                 // send cmd
-                fprintf(stderr, "planning on sending this bytes: %i : %s\n", tempBuffLen, tempBuff);
+                //fprintf(stderr, "planning on sending this bytes: %i : %s\n", tempBuffLen, tempBuff);
                 sendto(sockfd, (const char *) tempBuff, tempBuffLen, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
-                fprintf(stderr, "sent this: %s\n", tempBuff);
+                //fprintf(stderr, "sent this: %s\n", tempBuff);
                 printf("SEND %i %i ACK\n", intSeqNum, intAckNum);
                 bzero(tempBuff, 524);
 
 
                 //receive server's last message
-                bzero(buffer, 524);
+
                 while(1)
                 {
+                    bzero(buffer, 524);
                     n = recvfrom(sockfd, (char *)buffer, MAXLINE, MSG_WAITALL, (struct sockaddr *) &servaddr, &len);
                     printRecv(buffer);
 
-                    // bzero(modAckNum, 6);
-                    // for (int i = 0; i < 5; i++)
-                    // {
-                    //     if (buffer[i] != 'z') //if digit
-                    //         strncat(modAckNum, &buffer[i], 1); // save all digits into modSeqNum
-                    // }
-                    // intAckNum = atoi(modAckNum); // turn to int; get incremented in string form
-                    // bzero(modSeqNum, 6);
-                    // for (int i = 6; i < 12; i++)
-                    // {
-                    //     if (buffer[i] != 'z') //if digit
-                    //         strncat(modSeqNum, &buffer[i], 1); // save all digits into modSeqNum
-                    // }
-                    // intSeqNum = atoi(modSeqNum); // turn to int; get incremented in string form
-                    // if (buffer[11] == 'a')
-                    //     printf("RECV %i %i ACK\n", intAckNum, intSeqNum);
-                    // if (buffer[11] == 'b')
-                    //     printf("RECV %i %i SYN\n", intAckNum, intSeqNum);
-                    // if (buffer[11] == 'c')
-                    //     printf("RECV %i %i FIN\n", intAckNum, intSeqNum);
-                    // if (buffer[11] == 'd')
-                    //     printf("RECV %i %i ACK SYN\n", intAckNum, intSeqNum);
-                    // if (buffer[11] == 'e')
-                    //     printf("RECV %i %i ACK FIN\n", intAckNum, intSeqNum);
-                    // if (buffer[11] == 'f')
-                    //     printf("RECV %i %i SYN FIN\n", intAckNum, intSeqNum);
-                    // if (buffer[11] == 'g')
-                    //     printf("RECV %i %i ACK SYN FIN\n", intAckNum, intSeqNum);
                     // bzero(buffer, 524);
                     // prepping for fin
-                    if (contentLen == wholeSize)
+                    if (feof(fp) ) //contentLen == wholeSize)
                     {
+                        fprintf(stderr, "suk end\n");
+                        fprintf(stderr, "whole file done fin time\n");
                         // send out fin
-                        // seqNumLen = sprintf(seqNum, "%i", intSeqNum);
-                        // intAckNum = 0;
-                        // bzero(ackNum, 5);
-                        // int ackNumLen = sprintf(ackNum, "%i", intAckNum);
-                        // bzero(modSeqNum, 6);
-                        // memcpy(modSeqNum, seqNum, 5);
-                        // bzero(modAckNum, 6);
-                        // memcpy(modAckNum, ackNum, 5);
                         // // a = ACK
                         // // b = SYN
                         // // c = FIN
@@ -222,17 +151,8 @@ int main() {
                         // // f = SYN, FIN
                         // // g = ACK, SYN, FIN
                         // flags = 'c';
-                        // numZ = 5 - seqNumLen;
-                        // for (int i = 0; i < numZ; i++)
-                        //     strncat(modSeqNum, &z, 1);
-                        // strncat(modSeqNum, &z, 1);
-                        // numZA = 5 - ackNumLen;
-                        // for (int i = 0; i < numZA; i++)
-                        //     strncat(modAckNum, &z, 1);
-                        // strncat(modAckNum, &flags, 1);
+
                         bzero(header, 12);
-                        // sprintf(header, "%s%s", modSeqNum, modAckNum);
-                        // *header = makeHeader(getSeq(buffer), 0, 'c');
                         memcpy(header, makeHeader(getSeq(buffer), 0, 'c'), 12);
                         printf("plan on sending header: %s\n", header);
                         sendto(sockfd, (const char *) header, 12, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
@@ -268,6 +188,7 @@ int main() {
                                     printf("this wahat ai wasnna send: %s\n", finheader);
                                     sendto(sockfd, (const char *) finheader, 12, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
                                     printf("%s\n", finack);
+                                    fprintf(stderr, "ok bye server :'( \n");
                                 }// send
 
                                 while (1)
@@ -277,7 +198,36 @@ int main() {
                         // receive server's fin
                         // send ack of fin
 
+                    } // if whole size transmitted
+                    fprintf(stderr, "more bytes to go boyz\n");
+                    bzero(content, 512);
+                    contentLen = fread(content, sizeof(char), 512, fp);
+                    fprintf(stderr, "second round: %i bytes: %s\n", contentLen, content);
+                    tempBuffLen = contentLen + 12;
+
+                    bzero(header, 12);
+                    memcpy(header, makeHeader(getSeq(buffer), getAck(buffer)+1, 'a'), 12);
+                    // new way
+                    for (int i = 0; i < 12; i++)
+                    {
+                        tempBuff[i] = header[i];
                     }
+                    for (int i = 0; i < contentLen; i++)
+                    {
+                        tempBuff[i+12] = content[i];
+                    }
+
+
+                    // send cmd
+                    //fprintf(stderr, "planning on sending this bytes: %i : %s\n", tempBuffLen, tempBuff);
+                    sendto(sockfd, (const char *) tempBuff, tempBuffLen, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
+                    //fprintf(stderr, "sent this: %s\n", tempBuff);
+                    printf("SEND %i %i ACK\n", getSeq(buffer), getAck(buffer)+1);
+
+                    // if (feof(fp))
+                    //     fprintf(stderr, "suk EEEEEend\n");
+                    // while(1)
+                    // {}
                 }
 
 

@@ -18,6 +18,10 @@ char * makeHeader(int pintSeqNum, int pintAckNum, char pflags);
 
 char hostName[10] = "localhost";
 struct hostent *server;
+int currentSeqNum = 0;
+int currentAckNum = 0;
+int lastRecAck = 0;
+
 
 int main() {
     int sockfd;
@@ -60,6 +64,8 @@ int main() {
         fprintf(stderr, "sent header: %s\n", header);
 
         //printf("SEND %s %s SYN\n", seqNum, ackNum);
+        currentSeqNum = number;
+        currentAckNum = 0;
         printf("SEND %i %i SYN\n", number, 0);
 
         while(1)
@@ -85,9 +91,11 @@ int main() {
                 bzero(header, 12);
                 memcpy(header, makeHeader(intSeqNum, intAckNum, 'a'), 12);
 
+                currentSeqNum = intSeqNum;
+                currentAckNum = intAckNum;
                 // trying to send a whole a$$ file
                 char content[512]={0};
-                FILE *fp = fopen("big.txt", "r");
+                FILE *fp = fopen("poo", "r");
                 if (fp == NULL)
                 {
                     fprintf(stderr, "Unable to open requested file\n");
@@ -127,6 +135,41 @@ int main() {
                 printf("SEND %i %i ACK\n", intSeqNum, intAckNum);
                 bzero(tempBuff, 524);
 
+                currentSeqNum = currentSeqNum + contentLen;
+                currentAckNum = intAckNum;
+
+                // nine more packets left
+                for (int i = 0; i < 9; i++)
+                {
+                    // new schtufff
+                    if (feof(fp))
+                    {
+                        fprintf(stderr, "initial window done boyyys \n");
+                        break;
+                    }
+
+                    fprintf(stderr, "more bytes to go boyz\n");
+                    bzero(content, 512);
+                    contentLen = fread(content, sizeof(char), 512, fp);
+                    fprintf(stderr, "second round: %i bytes: %s\n", contentLen, content);
+                    tempBuffLen = contentLen + 12;
+                    bzero(header, 12);
+                    memcpy(header, makeHeader(currentSeqNum, 0, 'n'), 12);
+                    // new way
+                    for (int i = 0; i < 12; i++)
+                    {
+                        tempBuff[i] = header[i];
+                    }
+                    for (int i = 0; i < contentLen; i++)
+                    {
+                        tempBuff[i+12] = content[i];
+                    }
+                    // send cmd
+                    //fprintf(stderr, "planning on sending this bytes: %i : %s\n", tempBuffLen, tempBuff);
+                    sendto(sockfd, (const char *) tempBuff, tempBuffLen, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
+                    printf("SEND %i %i\n", currentSeqNum, 0);
+                    currentSeqNum = currentSeqNum + contentLen;
+                }
 
                 //receive server's last message
 
@@ -135,10 +178,39 @@ int main() {
                     bzero(buffer, 524);
                     n = recvfrom(sockfd, (char *)buffer, MAXLINE, MSG_WAITALL, (struct sockaddr *) &servaddr, &len);
                     printRecv(buffer);
-
                     // bzero(buffer, 524);
+                    if (!feof(fp) && buffer[11] == 'a')
+                    {
+                        lastRecAck = getAck(buffer);
+                        fprintf(stderr, "ohohoh we are not donee yet\n");
+                        bzero(content, 512);
+                        contentLen = fread(content, sizeof(char), 512, fp);
+                        fprintf(stderr, "second round: %i bytes: %s\n", contentLen, content);
+                        tempBuffLen = contentLen + 12;
+                        bzero(header, 12);
+                        memcpy(header, makeHeader(currentSeqNum, 0, 'n'), 12);
+                        // new way
+                        for (int i = 0; i < 12; i++)
+                        {
+                            tempBuff[i] = header[i];
+                        }
+                        for (int i = 0; i < contentLen; i++)
+                        {
+                            tempBuff[i+12] = content[i];
+                        }
+                        // send cmd
+                        //fprintf(stderr, "planning on sending this bytes: %i : %s\n", tempBuffLen, tempBuff);
+                        sendto(sockfd, (const char *) tempBuff, tempBuffLen, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
+                        printf("SEND %i %i\n", currentSeqNum, 0);
+                        currentSeqNum = currentSeqNum + contentLen;
+                    }
+
+
+
+
+
                     // prepping for fin
-                    if (feof(fp) ) //contentLen == wholeSize)
+                    else if (feof(fp) ) //contentLen == wholeSize)
                     {
                         fprintf(stderr, "suk end\n");
                         fprintf(stderr, "whole file done fin time\n");
@@ -153,84 +225,56 @@ int main() {
                         // flags = 'c';
 
                         bzero(header, 12);
-                        memcpy(header, makeHeader(getSeq(buffer), 0, 'c'), 12);
-                        printf("plan on sending header: %s\n", header);
+                        memcpy(header, makeHeader(currentSeqNum, 0, 'c'), 12);
+                        fprintf(stderr, "plan on sending header: %s\n", header);
                         sendto(sockfd, (const char *) header, 12, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
-                        printf("SEND %i 0 FIN\n", getSeq(buffer));
-                        printf("HELLO????\n");
+                        printf("SEND %i 0 FIN\n", currentSeqNum);
+                        fprintf(stderr, "HELLO????\n");
 
                         // receive server's ack of fim
                         while(1)
                         {
-                            printf("SIR???????\n");
+                            fprintf(stderr, "SIR???????\n");
                             bzero(buffer, 524);
                             n = recvfrom(sockfd, (char *)buffer, MAXLINE, MSG_WAITALL, (struct sockaddr *) &servaddr, &len);
-                            printf("DID YOU RECEIVE ANYTHING?? U GOOD?\n");
-                            printf("here: %s\n", buffer);
+                            lastRecAck = getAck(buffer);
+                            fprintf(stderr, "DID YOU RECEIVE ANYTHING?? U GOOD?\n");
+                            fprintf(stderr, "here: %s\n", buffer);
+                            // if (buffer[11] != 'c')
+                            // {
+                            //     fprintf(stderr, "u are not fin, i want fin\n");
+                            //     continue;
+                            // }
                             printRecv(buffer);
                             // send
                             char finheader[12];
                             bzero(finheader, 12);
-                            memcpy(finheader, makeHeader(getSeq(buffer), getAck(buffer)+1, 'a'), 12);
+                            memcpy(finheader, makeHeader(currentSeqNum+1, currentAckNum+1, 'a'), 12);
 
                             char finack[50] = {0};
-                            sprintf(finack, "SEND %i %i ACK\n", getSeq(buffer), getAck(buffer)+1);
+                            sprintf(finack, "SEND %i %i ACK\n", currentSeqNum+1, currentAckNum+1);
 
                             while(1)
                             {
-                                printf("LLOKING FOR FINNNNNNN\n");
+                                fprintf(stderr, "LLOKING FOR FINNNNNNN\n");
                                 bzero(buffer, 524);
                                 n = recvfrom(sockfd, (char *)buffer, MAXLINE, MSG_WAITALL, (struct sockaddr *) &servaddr, &len);
-                                printf("here: %s\n", buffer);
+                                lastRecAck = getAck(buffer);
+                                fprintf(stderr, "here: %s\n", buffer);
                                 printRecv(buffer);
                                 if (buffer[11] == 'c') // if server sends a fin
                                 {
-                                    printf("this wahat ai wasnna send: %s\n", finheader);
+                                    fprintf(stderr, "this wahat ai wasnna send: %s\n", finheader);
                                     sendto(sockfd, (const char *) finheader, 12, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
                                     printf("%s\n", finack);
                                     fprintf(stderr, "ok bye server :'( \n");
-                                }// send
-
-                                while (1)
-                                {}
+                                    exit(0);
+                                }
                             }
                         }
-                        // receive server's fin
-                        // send ack of fin
 
-                    } // if whole size transmitted
-                    fprintf(stderr, "more bytes to go boyz\n");
-                    bzero(content, 512);
-                    contentLen = fread(content, sizeof(char), 512, fp);
-                    fprintf(stderr, "second round: %i bytes: %s\n", contentLen, content);
-                    tempBuffLen = contentLen + 12;
-
-                    bzero(header, 12);
-                    memcpy(header, makeHeader(getSeq(buffer), getAck(buffer)+1, 'a'), 12);
-                    // new way
-                    for (int i = 0; i < 12; i++)
-                    {
-                        tempBuff[i] = header[i];
                     }
-                    for (int i = 0; i < contentLen; i++)
-                    {
-                        tempBuff[i+12] = content[i];
-                    }
-
-
-                    // send cmd
-                    //fprintf(stderr, "planning on sending this bytes: %i : %s\n", tempBuffLen, tempBuff);
-                    sendto(sockfd, (const char *) tempBuff, tempBuffLen, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
-                    //fprintf(stderr, "sent this: %s\n", tempBuff);
-                    printf("SEND %i %i ACK\n", getSeq(buffer), getAck(buffer)+1);
-
-                    // if (feof(fp))
-                    //     fprintf(stderr, "suk EEEEEend\n");
-                    // while(1)
-                    // {}
                 }
-
-
 
             }
         }
@@ -266,6 +310,7 @@ void printRecv(char* pbuffer)
     // e = ACK, FIN
     // f = SYN, FIN
     // g = ACK, SYN, FIN
+    // n = NOTHING
     if (pbuffer[11] == 'a')
         printf("RECV %i %i ACK\n", pintAckNum, pintSeqNum);
     if (pbuffer[11] == 'b')
@@ -280,6 +325,8 @@ void printRecv(char* pbuffer)
         printf("RECV %i %i SYN FIN\n", pintAckNum, pintSeqNum);
     if (pbuffer[11] == 'g')
         printf("RECV %i %i SYN FIN ACK\n", pintAckNum, pintSeqNum);
+    if (pbuffer[11] == 'n')
+        printf("RECV %i %i\n", pintAckNum, pintSeqNum);
 }
 
 int getAck(char * pbuffer)

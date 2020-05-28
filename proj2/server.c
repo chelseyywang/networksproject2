@@ -18,6 +18,8 @@ int getAck(char * pbuffer);
 int getSeq(char * pbuffer);
 char * makeHeader(int pintSeqNum, int pintAckNum, char pflags);
 
+int currentSeqNum = 221;
+int currentAckNum = 0;
 int main() {
     int sockfd;
     char buffer[524] = {0};
@@ -113,6 +115,12 @@ int main() {
             printf("RECV %i %i SYN FIN\n", intAckNum, intSeqNum);
         if (buffer[11] == 'g')
             printf("RECV %i %i SYN FIN ACK\n", intAckNum, intSeqNum);
+
+        intAckNum = getAck(buffer);
+        currentAckNum = intAckNum;
+        intSeqNum = getSeq(buffer);
+        currentSeqNum = intSeqNum;
+        fprintf(stderr, "YOYOO BISHH HERE DA NUMBAS: %i %i\n", intAckNum, intSeqNum);
         while(1) // wait for client to send first handshake
         {
             if (finSent == 1)
@@ -122,8 +130,8 @@ int main() {
             {
                 // parse header
 
-                intAckNum = intAckNum + 1;
-                int ackNumLen = sprintf(ackNum, "%i", intAckNum); // turn int to string seqNum; get its length
+                currentAckNum = currentAckNum + 1;
+                int ackNumLen = sprintf(ackNum, "%i", currentAckNum); // turn int to string seqNum; get its length
                 int numZ = 5 - ackNumLen;
                 bzero(modAckNum, 6);
                 memcpy(modAckNum, ackNum, ackNumLen);
@@ -167,8 +175,10 @@ int main() {
                     len);
 
                 fprintf(stderr, "server sent: %s\n", header);
-                printf("SEND 221 %i SYN ACK\n", intAckNum);
+                printf("SEND 221 %i SYN ACK\n", currentAckNum);
+                currentSeqNum = 221;
                 printf("Listening for third handshake...\n");
+                currentSeqNum = currentSeqNum + 1;
                 int prevIntSeqNum = 0;
                 while(1)
                 {
@@ -187,7 +197,7 @@ int main() {
                         fprintf(stderr, "bye client :( \n");
                         break;
                     }
-                    if (buffer[11] == 'a') // if client sends an ACK
+                    if (buffer[11] == 'a' || buffer[11] == 'n') // if client sends an ACK
                     {
                         //fprintf(stderr, "Client3 : %s\n", buffer);
                         char fileBuff[512] = {0};
@@ -237,56 +247,63 @@ int main() {
 
 
 
-                        bzero(modAckNum, 6);
-                        for (int i = 0; i < 5; i++)
-                        {
-                            if (buffer[i] != 'z') //if digit
-                                strncat(modAckNum, &buffer[i], 1); // save all digits into modSeqNum
-                        }
-                        intAckNum = atoi(modAckNum); // turn to int; get incremented in string form
-                        bzero(modSeqNum, 6);
-                        for (int i = 6; i < 12; i++)
-                        {
-                            if (buffer[i] != 'z') //if digit
-                                strncat(modSeqNum, &buffer[i], 1); // save all digits into modSeqNum
-                        }
-                        intSeqNum = atoi(modSeqNum); // turn to int; get incremented in string form
-                        if (buffer[11] == 'a')
-                            printf("RECV %i %i ACK\n", intAckNum, intSeqNum);
-                        if (buffer[11] == 'b')
-                            printf("RECV %i %i SYN\n", intAckNum, intSeqNum);
-                        if (buffer[11] == 'c')
-                            printf("RECV %i %i FIN\n", intAckNum, intSeqNum);
-                        if (buffer[11] == 'd')
-                            printf("RECV %i %i SYN ACK\n", intAckNum, intSeqNum);
-                        if (buffer[11] == 'e')
-                            printf("RECV %i %i FIN ACK\n", intAckNum, intSeqNum);
-                        if (buffer[11] == 'f')
-                            printf("RECV %i %i SYN FIN\n", intAckNum, intSeqNum);
-                        if (buffer[11] == 'g')
-                            printf("RECV %i %i SYN FIN ACK\n", intAckNum, intSeqNum);
-                        intAckNum = intAckNum + n - 12;
+                        // bzero(modAckNum, 6);
+                        // for (int i = 0; i < 5; i++)
+                        // {
+                        //     if (buffer[i] != 'z') //if digit
+                        //         strncat(modAckNum, &buffer[i], 1); // save all digits into modSeqNum
+                        // }
+                        // intAckNum = atoi(modAckNum); // turn to int; get incremented in string form
+                        // bzero(modSeqNum, 6);
+                        // for (int i = 6; i < 12; i++)
+                        // {
+                        //     if (buffer[i] != 'z') //if digit
+                        //         strncat(modSeqNum, &buffer[i], 1); // save all digits into modSeqNum
+                        // }
+                        // intSeqNum = atoi(modSeqNum); // turn to int; get incremented in string form
+                        // if (buffer[11] == 'a')
+                        //     printf("RECV %i %i ACK\n", intAckNum, intSeqNum);
+                        // if (buffer[11] == 'b')
+                        //     printf("RECV %i %i SYN\n", intAckNum, intSeqNum);
+                        // if (buffer[11] == 'c')
+                        //     printf("RECV %i %i FIN\n", intAckNum, intSeqNum);
+                        // if (buffer[11] == 'd')
+                        //     printf("RECV %i %i SYN ACK\n", intAckNum, intSeqNum);
+                        // if (buffer[11] == 'e')
+                        //     printf("RECV %i %i FIN ACK\n", intAckNum, intSeqNum);
+                        // if (buffer[11] == 'f')
+                        //     printf("RECV %i %i SYN FIN\n", intAckNum, intSeqNum);
+                        // if (buffer[11] == 'g')
+                        //     printf("RECV %i %i SYN FIN ACK\n", intAckNum, intSeqNum);
 
+                        // fprintf(stderr, "^^idk her\n");
+                        printRecv(buffer);
+
+
+                        intAckNum = intAckNum + n - 12;
+                        currentAckNum = currentAckNum + n - 12;
+                        //currentSeqNum = intSeqNum;
                         if (buffer[11] == 'c') // if client sends a FIN
                         {
                             fprintf(stderr, "got fin from the client\n");
                             intAckNum = intAckNum + 1;
+                            currentAckNum = currentAckNum + 1;
                         }
 
 
+
                         flags = 'a';
-                        ackNumLen = sprintf(ackNum, "%i", intAckNum); // turn int to string seqNum; get its length
+                        ackNumLen = sprintf(ackNum, "%i", currentAckNum); // turn int to string seqNum; get its length
                         numZ = 5 - ackNumLen;
                         bzero(modAckNum, 6);
                         memcpy(modAckNum, ackNum, ackNumLen);
-                        int seqNumLen = sprintf(seqNum, "%i", intSeqNum); // turn int to string seqNum; get its length
-                        if (buffer[11] == 'c')
-                            {
-                                bzero(seqNum, 5);
-                                // printf("hi prev2: %i\n", prevIntSeqNum);
-                                seqNumLen = sprintf(seqNum, "%i", prevIntSeqNum);
-                                intSeqNum = prevIntSeqNum;
-                            }
+                        int seqNumLen = sprintf(seqNum, "%i", currentSeqNum); // turn int to string seqNum; get its length
+                        // if (buffer[11] == 'c')
+                        //     {
+                        //         bzero(seqNum, 5);
+                        //         seqNumLen = sprintf(seqNum, "%i", prevIntSeqNum);
+                        //         currentSeqNum = prevIntSeqNum;
+                        //     }
                         int numSZ = 5 - seqNumLen;
                         bzero(modSeqNum, 6);
                         memcpy(modSeqNum, seqNum, seqNumLen);
@@ -299,10 +316,16 @@ int main() {
                         bzero(header, 12);
                         strncat(modSeqNum, &z, 1);
                         strncat(modAckNum, &flags, 1);
-                        sprintf(header, "%s%s", modSeqNum, modAckNum);
+                        //sprintf(header, "%s%s", modSeqNum, modAckNum);
+                        // HAHAHAHAHAH OOH
+                        memcpy(header, makeHeader(currentSeqNum, currentAckNum, 'a'), 12);
                         sendto(sockfd, (const char *)header, 12, MSG_CONFIRM, (const struct sockaddr *) &cliaddr, len);
                         printf("actually sent: %s\n", header);
-                        printf("SEND %i %i ACK\n", intSeqNum, intAckNum);
+                        printf("SEND %i %i ACK\n", currentSeqNum, currentAckNum);
+                        //currentSeqNum = intSeqNum;
+                        //currentAckNum = intAckNum;
+                        fprintf(stderr, "YOYOO more NUMBAS: %i %i\n", currentSeqNum, currentAckNum);
+
 
                         // send my fin
                         if (buffer[11] == 'c')
@@ -315,7 +338,7 @@ int main() {
                             memcpy(modAckNum, ackNum, ackNumLen);
                                     bzero(seqNum, 5);
                                     // printf("hi prev2: %i\n", prevIntSeqNum);
-                                    seqNumLen = sprintf(seqNum, "%i", prevIntSeqNum);
+                                    seqNumLen = sprintf(seqNum, "%i", currentSeqNum);
                                     intSeqNum = prevIntSeqNum;
                             int numSZ = 5 - seqNumLen;
                             bzero(modSeqNum, 6);
@@ -332,7 +355,9 @@ int main() {
                             sprintf(header, "%s%s", modSeqNum, modAckNum);
                             sendto(sockfd, (const char *)header, 12, MSG_CONFIRM, (const struct sockaddr *) &cliaddr, len);
                             printf("actually sent: %s\n", header);
-                            printf("SEND %i %i FIN\n", intSeqNum, intAckNum);
+                            printf("SEND %i %i FIN\n", currentSeqNum, intAckNum);
+                            fprintf(stderr, "YOYOO EVEN MAS NUMBAS: %i %i\n", currentAckNum, currentSeqNum);
+
                             finSent = 1;
                         }
 
@@ -388,6 +413,8 @@ void printRecv(char* pbuffer)
         printf("RECV %i %i SYN FIN\n", pintAckNum, pintSeqNum);
     if (pbuffer[11] == 'g')
         printf("RECV %i %i SYN FIN ACK\n", pintAckNum, pintSeqNum);
+    if (pbuffer[11] == 'n')
+        printf("RECV %i %i\n", pintAckNum, pintSeqNum);
 }
 
 int getAck(char * pbuffer)

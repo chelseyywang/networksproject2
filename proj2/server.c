@@ -24,6 +24,7 @@ int lastRecvAck = 0;
 int lastSentAck = 0;
 int missingPacket = 0;
 int resendSynAck = 0;
+int roundNum = 0;
 
 int main() {
     int sockfd;
@@ -291,12 +292,32 @@ int main() {
 
                     intAckNum = intAckNum + n - 12;
                     currentAckNum = currentAckNum + n - 12;
+                    if (currentAckNum > 25600)
+                    {
+                        currentAckNum = currentAckNum - 25600;
+                        roundNum++;
+                    }
+                    if (intAckNum > 25600)
+                    {
+                        intAckNum = intAckNum - 25600;
+                        roundNum++;
+                    }
                     //currentSeqNum = intSeqNum;
                     if (buffer[11] == 'c') // if client sends a FIN
                     {
                         fprintf(stderr, "got fin from the client\n");
                         intAckNum = intAckNum + 1;
+                        if (intAckNum > 25600)
+                        {
+                            intAckNum = intAckNum - 25600;
+                            roundNum++;
+                        }
                         currentAckNum = currentAckNum + 1;
+                        if (currentAckNum > 25600)
+                        {
+                            currentAckNum = currentAckNum - 25600;
+                            roundNum++;
+                        }
                     }
 
 

@@ -73,7 +73,8 @@ int main() {
         int n, len;
         // send first syn
 
-        sendto(sockfd, (const char *) header, 12, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
+        // comment out to mock packet loss
+        //sendto(sockfd, (const char *) header, 12, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
         clock_gettime(CLOCK_MONOTONIC, &start);
         fprintf(stderr, "sent header: %s\n", header);
 
@@ -162,7 +163,7 @@ int main() {
                 currentAckNum = intAckNum;
                 // trying to send a whole a$$ file
                 char content[512]={0};
-                FILE *fp = fopen("hug.txt", "r");
+                FILE *fp = fopen("ova", "r");
                 if (fp == NULL)
                 {
                     fprintf(stderr, "Unable to open requested file\n");
@@ -207,6 +208,11 @@ int main() {
                 //fprintf(stderr, "start time: %zu\n", t1.tv_sec*1000);
 
                 currentSeqNum = currentSeqNum + contentLen;
+                if (currentSeqNum > 25600)
+                {
+                    currentSeqNum = currentSeqNum - 25600;
+                    roundNum++;
+                }
                 currentAckNum = intAckNum;
 
                 // nine more packets left
@@ -243,6 +249,11 @@ int main() {
                         sendto(sockfd, (const char *) tempBuff, tempBuffLen, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
                     printf("SEND %i %i\n", currentSeqNum, 0);
                     currentSeqNum = currentSeqNum + contentLen;
+                    if (currentSeqNum > 25600)
+                    {
+                        currentSeqNum = currentSeqNum - 25600;
+                        roundNum++;
+                    }
                 }
 
                 //receive server's last message
@@ -251,7 +262,7 @@ int main() {
                 {
                     bzero(buffer, 524);
                     fprintf(stderr, "receive here: curseqnum: %i\n", currentSeqNum);
-                    if (currentSeqNum - number - 1 < wholeSize)
+                    if (currentSeqNum +25600*roundNum - number - 1 < wholeSize)
                         n = recvfrom(sockfd, (char *)buffer, MAXLINE, MSG_WAITALL, (struct sockaddr *) &servaddr, &len);
                     printf("helloo\n");
                     printRecv(buffer);
@@ -305,6 +316,11 @@ int main() {
                             sendto(sockfd, (const char *) tempBuff, tempBuffLen, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
                             printf("RESEND %i %i\n", currentSeqNum, 0);
                             currentSeqNum = currentSeqNum + contentLen;
+                            if (currentSeqNum > 25600)
+                            {
+                                currentSeqNum = currentSeqNum - 25600;
+                                roundNum++;
+                            }
                         }
                     }
 
@@ -341,6 +357,11 @@ int main() {
                         sendto(sockfd, (const char *) tempBuff, tempBuffLen, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
                         printf("SEND %i %i\n", currentSeqNum, 0);
                         currentSeqNum = currentSeqNum + contentLen;
+                        if (currentSeqNum > 25600)
+                        {
+                            currentSeqNum = currentSeqNum - 25600;
+                            roundNum++;
+                        }
                     }
 
 
@@ -404,7 +425,7 @@ int main() {
                                 alreadySentFin = 0;
                                 fprintf(stderr, "get seq, number, wholesize: %i, %i, %i\n", getSeq(buffer), number, wholeSize);
                                 // if we receive the last ack, signal that all acks have been received
-                                if (getSeq(buffer)+roundNum*512 - number - 1 == wholeSize) // if everything received
+                                if (getSeq(buffer)+roundNum*25600 - number - 1 == wholeSize) // if everything received
                                 {
                                     // fprintf(stderr, "suk end\n");
                                     bzero(header, 12);

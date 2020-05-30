@@ -29,6 +29,7 @@ int lastRecvAck = 0;
 int allAcksRecv = 0;
 int wholeSize = 0;
 int badPoll = 0;
+int roundNum = 0;
 long long diff;
 struct timespec start, end;
 
@@ -250,12 +251,12 @@ int main() {
                 {
                     bzero(buffer, 524);
                     fprintf(stderr, "receive here: curseqnum: %i\n", currentSeqNum);
-                    if (currentSeqNum - number < wholeSize)
+                    if (currentSeqNum - number - 1 < wholeSize)
                         n = recvfrom(sockfd, (char *)buffer, MAXLINE, MSG_WAITALL, (struct sockaddr *) &servaddr, &len);
                     printf("helloo\n");
                     printRecv(buffer);
-                    if (getSeq(buffer) == currentSeqNum)
-                        allAcksRecv = 1;
+                    // if (getSeq(buffer) == currentSeqNum)
+                    //     allAcksRecv = 1;
                     printf("hellimoo\n");
 
                     // just received something, check timer
@@ -352,32 +353,23 @@ int main() {
                         int alreadySentFin = 0;
                         // if (allAcksRecv == 1)
                         // {
-                            fprintf(stderr, "suk end\n");
-                            //fprintf(stderr, "whole file done fin time\n");
-                            // send out fin
-                            // // a = ACK
-                            // // b = SYN
-                            // // c = FIN
-                            // // d = ACK, SYN
-                            // // e = ACK, FIN
-                            // // f = SYN, FIN
-                            // // g = ACK, SYN, FIN
-                            // flags = 'c';
+                            // fprintf(stderr, "suk end\n");
+                            // bzero(header, 12);
+                            // memcpy(header, makeHeader(currentSeqNum, 0, 'c'), 12);
+                            // fprintf(stderr, "plan on sending header: %s\n", header);
+                            // sendto(sockfd, (const char *) header, 12, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
+                            // printf("SEND %i 0 FIN\n", currentSeqNum);
 
-                            bzero(header, 12);
-                            memcpy(header, makeHeader(currentSeqNum, 0, 'c'), 12);
-                            fprintf(stderr, "plan on sending header: %s\n", header);
-                            sendto(sockfd, (const char *) header, 12, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
-                            printf("SEND %i 0 FIN\n", currentSeqNum);
-                            alreadySentFin = 1;
                         // }
 
-                        //fprintf(stderr, "HELLO????\n");
+                        fprintf(stderr, "HELLO????\n");
 
                         // receive server's ack of fim
                         while(1)
                         {
                             //fprintf(stderr, "SIR???????\n");
+
+
                             bzero(buffer, 524);
                             n = recvfrom(sockfd, (char *)buffer, MAXLINE, MSG_WAITALL, (struct sockaddr *) &servaddr, &len);
                             lastRecvAck = getAck(buffer);
@@ -385,6 +377,11 @@ int main() {
                             //fprintf(stderr, "here: %s\n", buffer);
 
                             printRecv(buffer);
+                            if (getSeq(buffer)+roundNum*512 - number - 1 == wholeSize)
+                            {
+                                fprintf(stderr, "set alr sent fin\n");
+                                alreadySentFin = 1;
+                            }
                             // send
                             char finheader[12];
                             bzero(finheader, 12);
@@ -395,12 +392,29 @@ int main() {
 
                             while(1)
                             {
-                                //fprintf(stderr, "LLOKING FOR FINNNNNNN\n");
-                                bzero(buffer, 524);
-                                n = recvfrom(sockfd, (char *)buffer, MAXLINE, MSG_WAITALL, (struct sockaddr *) &servaddr, &len);
-                                lastRecvAck = getAck(buffer);
-                                //fprintf(stderr, "here: %s\n", buffer);
-                                printRecv(buffer);
+                                // fprintf(stderr, "LLOKING FOR FINNNNNNN\n");
+                                if (alreadySentFin == 0)
+                                {
+                                    bzero(buffer, 524);
+                                    n = recvfrom(sockfd, (char *)buffer, MAXLINE, MSG_WAITALL, (struct sockaddr *) &servaddr, &len);
+                                    lastRecvAck = getAck(buffer);
+                                    //fprintf(stderr, "here: %s\n", buffer);
+                                    printRecv(buffer);
+                                }
+                                alreadySentFin = 0;
+                                fprintf(stderr, "get seq, number, wholesize: %i, %i, %i\n", getSeq(buffer), number, wholeSize);
+                                // if we receive the last ack, signal that all acks have been received
+                                if (getSeq(buffer)+roundNum*512 - number - 1 == wholeSize) // if everything received
+                                {
+                                    // fprintf(stderr, "suk end\n");
+                                    bzero(header, 12);
+                                    memcpy(header, makeHeader(currentSeqNum, 0, 'c'), 12);
+                                    fprintf(stderr, "plan on sending header: %s\n", header);
+                                    sendto(sockfd, (const char *) header, 12, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
+                                    printf("SEND %i 0 FIN\n", currentSeqNum);
+                                }
+
+
                                 if (buffer[11] == 'c') // if server sends a fin
                                 {
                                     //fprintf(stderr, "this wahat ai wasnna send: %s\n", finheader);

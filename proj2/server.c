@@ -23,6 +23,7 @@ int currentAckNum = 0;
 int lastRecvAck = 0;
 int lastSentAck = 0;
 int missingPacket = 0;
+int resendSynAck = 0;
 
 int main() {
     int sockfd;
@@ -138,6 +139,11 @@ int main() {
                 // parse header
 
                 currentAckNum = currentAckNum + 1;
+                if (resendSynAck == 1)
+                {
+                    currentAckNum = currentAckNum - 1;
+                    resendSynAck = 0;
+                }
                 lastSentAck = currentAckNum;
                 int ackNumLen = sprintf(ackNum, "%i", currentAckNum); // turn int to string seqNum; get its length
                 int numZ = 5 - ackNumLen;
@@ -202,6 +208,7 @@ int main() {
                     if (buffer[11] == 'b')
                     {
                         fprintf(stderr, "got syn instead, synack prolly lost\n");
+                        resendSynAck = 1;
                         break;
                     }
                     if (finSent == 1 && buffer[11] == 'a')

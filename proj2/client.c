@@ -32,7 +32,9 @@ int wholeSize = 0;
 int badPoll = 0;
 int roundNum = 0;
 int readIn = 0;
+int lastlast = 0;
 int lastlastAck = 0;
+int useless = 0;
 long long diff;
 long long diff2;
 struct timespec start, end;
@@ -116,6 +118,8 @@ int main() {
                 buffer[n] = '\0';
                 //fprintf(stderr, "Server sent: %s\n", buffer);
                 printRecv(buffer);
+                lastRecvSeq = getSeq(buffer);
+                lastRecvAck = getAck(buffer);
                 fprintf(stderr, "what i just read: %s\n", buffer);
                 if (buffer[11] != 'd')
                 {
@@ -164,7 +168,7 @@ int main() {
             currentAckNum = intAckNum;
             // trying to send a whole a$$ file
             char content[512]={0};
-            FILE *fp = fopen("dan", "r");
+            FILE *fp = fopen("bigfile", "r");
             if (fp == NULL)
             {
                 fprintf(stderr, "Unable to open requested file\n");
@@ -194,7 +198,11 @@ int main() {
                 tempBuff[i+12] = content[i];
             }
 
-            sendto(sockfd, (const char *) tempBuff, tempBuffLen, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
+            // commmented out wrong whoops try agian
+            // if (useless == 0)
+            //     useless = 1;
+            // else
+                sendto(sockfd, (const char *) tempBuff, tempBuffLen, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
             //fprintf(stderr, "sent this: %s\n", tempBuff);
             printf("SEND %i %i ACK\n", intSeqNum, intAckNum);
             bzero(tempBuff, 524);
@@ -254,30 +262,119 @@ int main() {
             }
 
             //receive server's last message
-
+            // yes things are actually received here wahoo
+            // no longer initial packets area
             while(1)
             {
-                int lastlast = lastRecvSeq;
-                bzero(buffer, 524);
-                fprintf(stderr, "receive here: curseqnum: %i\n", currentSeqNum);
-                if (currentSeqNum +25600*roundNum - number - 1 < wholeSize)
+                // I WANT TO POLL HERE
+                ret = poll(fds, 1, 500);
+                if (ret > 0)
                 {
-                    n = recvfrom(sockfd, (char *)buffer, MAXLINE, MSG_WAITALL, (struct sockaddr *) &servaddr, &len);
-                    lastRecvSeq = getSeq(buffer);
-                    lastlastAck = lastRecvAck;
-                    lastRecvAck = getAck(buffer);
+                    if (fds[0].revents & POLLIN)
+                    {
+                        fprintf(stderr, "wantherereading...\n");
+                        bzero(buffer, 524);
+                        if (currentSeqNum +25600*roundNum - number - 1 < wholeSize)
+                            {
+                                n = recvfrom(sockfd, (char *)buffer, MAXLINE, MSG_WAITALL, (struct sockaddr *) &servaddr, &len);
+                                lastlast = lastRecvSeq;
+                                lastRecvSeq = getSeq(buffer);
+                                lastlastAck = lastRecvAck;
+                                lastRecvAck = getAck(buffer);
+                                fprintf(stderr, "done reading: %i\n", n);
+                                if (n < 0 )
+                                {
+                                    fprintf(stderr, "read error\n");
+                                    continue;
+                                }
+                                if (n == 0)
+                                {
+                                    fprintf(stderr, "got nothin\n");
+                                    continue;
+                                }
+                                printRecv(buffer);
+                                fprintf(stderr, "what i just read: %s\n", buffer);
+                            }
+                            fprintf(stderr, "quien es?? \n");
+
+                    }
                 }
-                printf("helloo\n");
-                printRecv(buffer);
-                // if (getSeq(buffer) == currentSeqNum)
-                //     allAcksRecv = 1;
-                printf("hellimoo\n");
-                printf("read: %i\n", readIn);
+
+                /////  WORKS FOR NOW DO NOT DELETE /////
+
+
+                // lastlast = lastRecvSeq;
+                // bzero(buffer, 524);
+                // fprintf(stderr, "receive here: curseqnum: %i\n", currentSeqNum);
+                // if (currentSeqNum +25600*roundNum - number - 1 < wholeSize)
+                // {
+                //     n = recvfrom(sockfd, (char *)buffer, MAXLINE, MSG_WAITALL, (struct sockaddr *) &servaddr, &len);
+                //     lastRecvSeq = getSeq(buffer);
+                //     lastlastAck = lastRecvAck;
+                //     lastRecvAck = getAck(buffer);
+                // }
+                // printf("helloo\n");
+                // printRecv(buffer);
+                // // if (getSeq(buffer) == currentSeqNum)
+                // //     allAcksRecv = 1;
+                // printf("hellimoo\n");
+                // printf("read: %i\n", readIn);
+
+                ///// ^ WORKS FOR NOW DO NOT DELETE /////
+
 
                 // just received something, check timer
                 clock_gettime(CLOCK_MONOTONIC, &end2);
                 diff2 = BILLION * (end2.tv_sec - start2.tv_sec) + end2.tv_nsec - start2.tv_nsec;
                 fprintf(stderr, "diff2: %lld\n", diff2);
+                if (diff2 > 50000000 && buffer[11] == 'd')
+                {
+                    // probably lost cleint sending 3rd ack so
+                    fprintf(stderr, "waananna poll here\n");
+                    fprintf(stderr, "prolly lost third ack so\n");
+                    fseek(fp,lastRecvSeq+roundNum*25600-number-1, SEEK_SET);
+                    // reset sequence number
+                    currentSeqNum = lastRecvSeq;
+                    printf("TIMEOUT %i\n", currentSeqNum);
+                    for (int i = 0; i < 10; i++)
+                    {
+                        // new schtufff
+                        if (feof(fp))
+                        {
+                            fprintf(stderr, "initial window done boyyys \n");
+                            break;
+                        }
+
+                        //fprintf(stderr, "more bytes to go boyz\n");
+                        bzero(content, 512);
+                        contentLen = fread(content, sizeof(char), 512, fp);
+                        //readIn+=contentLen;
+                        //fprintf(stderr, "second round: %i bytes: %s\n", contentLen, content);
+                        tempBuffLen = contentLen + 12;
+                        bzero(header, 12);
+                        memcpy(header, makeHeader(currentSeqNum, 0, 'n'), 12);
+                        // new way
+                        for (int i = 0; i < 12; i++)
+                        {
+                            tempBuff[i] = header[i];
+                        }
+                        for (int i = 0; i < contentLen; i++)
+                        {
+                            tempBuff[i+12] = content[i];
+                        }
+                        // send cmd
+                        //fprintf(stderr, "planning on sending this bytes: %i : %s\n", tempBuffLen, tempBuff);
+                        sendto(sockfd, (const char *) tempBuff, tempBuffLen, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
+                        printf("RESEND %i %i\n", currentSeqNum, 0);
+                        currentSeqNum = currentSeqNum + contentLen;
+                        if (currentSeqNum > 25600)
+                        {
+                            currentSeqNum = currentSeqNum - 25600;
+                            roundNum++;
+                        }
+                    }
+                    clock_gettime(CLOCK_MONOTONIC, &start2);
+                }
                 if ( diff2 > 500000000 && getSeq(buffer) == lastlast) //timeout, getting same ACKs
                 {
                     fprintf(stderr, "timer is over .5 sec\n");
@@ -382,6 +479,7 @@ int main() {
 
 
                 // bzero(buffer, 524);
+                // ONLY SEND IF FRESH ACK
                 if (!feof(fp) && buffer[11] == 'a' && lastRecvSeq!=lastlast)
                 {
                     fprintf(stderr, "not end, got ack\n");
@@ -418,6 +516,8 @@ int main() {
                         currentSeqNum = currentSeqNum - 25600;
                         roundNum++;
                     }
+                    /// TIMER SHOULD BE PUT HERE TOO///
+                     ///// YOOYOYOYOYOYO //////
                 }
 
 
@@ -436,42 +536,41 @@ int main() {
 
 
 
-                        // ret = poll(fds, 1, 500);
-                        // if (ret > 0)
-                        // {
-                        //     if (fds[0].revents & POLLIN)
-                        //     {
-                        //         fprintf(stderr, "1streading...\n");
-                        //         bzero(buffer, 524);
-                        //         n = recvfrom(sockfd, (char *)buffer, MAXLINE, MSG_WAITALL, (struct sockaddr *) &servaddr, &len);
-                        //         lastlast = lastRecvSeq;
-                        //         lastRecvSeq = getSeq(buffer);
-                        //         lastRecvAck = getAck(buffer);
-                        //         fprintf(stderr, "done reading: %i\n", n);
-                        //         if (n < 0 )
-                        //         {
-                        //             fprintf(stderr, "read error\n");
-                        //             continue;
-                        //         }
-                        //         if (n == 0)
-                        //         {
-                        //             fprintf(stderr, "got nothin\n");
-                        //             continue;
-                        //         }
-                        //         printRecv(buffer);
-                        //         buffer[n] = '\0';
-                        //         printRecv(buffer);
-                        //         fprintf(stderr, "what i just read: %s\n", buffer);
-                        //     }
-                        // }
+                        ret = poll(fds, 1, 500);
+                        if (ret > 0)
+                        {
+                            if (fds[0].revents & POLLIN)
+                            {
+                                fprintf(stderr, "1streading...\n");
+                                bzero(buffer, 524);
+                                n = recvfrom(sockfd, (char *)buffer, MAXLINE, MSG_WAITALL, (struct sockaddr *) &servaddr, &len);
+                                lastlast = lastRecvSeq;
+                                lastRecvSeq = getSeq(buffer);
+                                lastRecvAck = getAck(buffer);
+                                 fprintf(stderr, "quien es?? \n");
+                                fprintf(stderr, "done reading: %i\n", n);
+                                if (n < 0 )
+                                {
+                                    fprintf(stderr, "read error\n");
+                                    continue;
+                                }
+                                if (n == 0)
+                                {
+                                    fprintf(stderr, "got nothin\n");
+                                    continue;
+                                }
+                                printRecv(buffer);
+                                fprintf(stderr, "what i just read: %s\n", buffer);
+                            }
+                        }
                         // HOOYAH
 
-                        bzero(buffer, 524);
-                        n = recvfrom(sockfd, (char *)buffer, MAXLINE, MSG_WAITALL, (struct sockaddr *) &servaddr, &len);
-                        lastlast = lastRecvSeq;
-                        lastRecvSeq = getSeq(buffer);
-                        fprintf(stderr, "quien es?? \n");
-                        printRecv(buffer);
+                        // bzero(buffer, 524);
+                        // n = recvfrom(sockfd, (char *)buffer, MAXLINE, MSG_WAITALL, (struct sockaddr *) &servaddr, &len);
+                        // lastlast = lastRecvSeq;
+                        // lastRecvSeq = getSeq(buffer);
+                        // fprintf(stderr, "quien es?? \n");
+                        // printRecv(buffer);
 
                         // HOOYAH
 
@@ -480,8 +579,57 @@ int main() {
 
                         diff2 = BILLION * (end2.tv_sec - start2.tv_sec) + end2.tv_nsec - start2.tv_nsec;
                         fprintf(stderr, "diff2: %lld\n", diff2);
+                        if (diff2 > 50000000 && buffer[11] == 'd')
+                        {
+                            // probably lost cleint sending 3rd ack so
+                            fprintf(stderr, "DO I EVEN NEED THIS???\n");
+                            fprintf(stderr, "prolly lost third ack so\n");
+                            fseek(fp,lastRecvSeq+roundNum*25600-number-1, SEEK_SET);
+                            // reset sequence number
+                            currentSeqNum = lastRecvSeq;
+                            printf("TIMEOUT %i\n", currentSeqNum);
+                            for (int i = 0; i < 10; i++)
+                            {
+                                // new schtufff
+                                if (feof(fp))
+                                {
+                                    fprintf(stderr, "initial window done boyyys \n");
+                                    break;
+                                }
+
+                                //fprintf(stderr, "more bytes to go boyz\n");
+                                bzero(content, 512);
+                                contentLen = fread(content, sizeof(char), 512, fp);
+                                //readIn+=contentLen;
+                                //fprintf(stderr, "second round: %i bytes: %s\n", contentLen, content);
+                                tempBuffLen = contentLen + 12;
+                                bzero(header, 12);
+                                memcpy(header, makeHeader(currentSeqNum, 0, 'n'), 12);
+                                // new way
+                                for (int i = 0; i < 12; i++)
+                                {
+                                    tempBuff[i] = header[i];
+                                }
+                                for (int i = 0; i < contentLen; i++)
+                                {
+                                    tempBuff[i+12] = content[i];
+                                }
+                                // send cmd
+                                //fprintf(stderr, "planning on sending this bytes: %i : %s\n", tempBuffLen, tempBuff);
+                                sendto(sockfd, (const char *) tempBuff, tempBuffLen, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
+                                printf("RESEND %i %i\n", currentSeqNum, 0);
+                                currentSeqNum = currentSeqNum + contentLen;
+                                if (currentSeqNum > 25600)
+                                {
+                                    currentSeqNum = currentSeqNum - 25600;
+                                    roundNum++;
+                                }
+                            }
+                            clock_gettime(CLOCK_MONOTONIC, &start2);
+                        }
                         if ( diff2 > 500000000 && getSeq(buffer) == lastlast) //timeout, getting same ACKs
                         {
+                            fprintf(stderr, "DO I EVEN NEED THIS???\n");
                             fprintf(stderr, "timer is over .5 sec\n");
                             fprintf(stderr, "last ack, roundnum: %i %i\n", lastRecvSeq, roundNum);
                             // reposition file pointer
@@ -559,7 +707,7 @@ int main() {
                                         lastlast = lastRecvSeq;
                                         lastRecvSeq = getSeq(buffer);
                                         lastRecvAck = getAck(buffer);
-                                        fprintf(stderr, "done reading: %i\n", n);
+                                        fprintf(stderr, "DONE reading: %i\n", n);
                                         if (n < 0 )
                                         {
                                             fprintf(stderr, "read error\n");
@@ -572,7 +720,6 @@ int main() {
                                         }
                                         printRecv(buffer);
                                         buffer[n] = '\0';
-                                        printRecv(buffer);
                                         fprintf(stderr, "what i just read: %s\n", buffer);
                                     }
                                 }
@@ -595,6 +742,53 @@ int main() {
                                 fprintf(stderr, "diff2: %lld\n", diff2);
                                 fprintf(stderr, "get seq num: %i\n", lastRecvSeq);
                                 fprintf(stderr, "lastlast: %i\n", lastlast);
+                                if (diff2 > 50000000 && buffer[11] == 'd')
+                                {
+                                    // probably lost cleint sending 3rd ack so
+                                    fprintf(stderr, "prolly lost third ack so\n");
+                                    fseek(fp,lastRecvSeq+roundNum*25600-number-1, SEEK_SET);
+                                    // reset sequence number
+                                    currentSeqNum = lastRecvSeq;
+                                    printf("TIMEOUT %i\n", currentSeqNum);
+                                    for (int i = 0; i < 10; i++)
+                                    {
+                                        // new schtufff
+                                        if (feof(fp))
+                                        {
+                                            fprintf(stderr, "initial window done boyyys \n");
+                                            break;
+                                        }
+
+                                        //fprintf(stderr, "more bytes to go boyz\n");
+                                        bzero(content, 512);
+                                        contentLen = fread(content, sizeof(char), 512, fp);
+                                        //readIn+=contentLen;
+                                        //fprintf(stderr, "second round: %i bytes: %s\n", contentLen, content);
+                                        tempBuffLen = contentLen + 12;
+                                        bzero(header, 12);
+                                        memcpy(header, makeHeader(currentSeqNum, 0, 'n'), 12);
+                                        // new way
+                                        for (int i = 0; i < 12; i++)
+                                        {
+                                            tempBuff[i] = header[i];
+                                        }
+                                        for (int i = 0; i < contentLen; i++)
+                                        {
+                                            tempBuff[i+12] = content[i];
+                                        }
+                                        // send cmd
+                                        //fprintf(stderr, "planning on sending this bytes: %i : %s\n", tempBuffLen, tempBuff);
+                                        sendto(sockfd, (const char *) tempBuff, tempBuffLen, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
+                                        printf("RESEND %i %i\n", currentSeqNum, 0);
+                                        currentSeqNum = currentSeqNum + contentLen;
+                                        if (currentSeqNum > 25600)
+                                        {
+                                            currentSeqNum = currentSeqNum - 25600;
+                                            roundNum++;
+                                        }
+                                    }
+                                    clock_gettime(CLOCK_MONOTONIC, &start2);
+                                }
                                 if ( diff2 > 500000000 && lastRecvSeq == lastlast) //timeout, getting same ACKs
                                 {
                                     fprintf(stderr, "timer is over .5 sec\n");

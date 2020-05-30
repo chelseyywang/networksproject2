@@ -142,7 +142,8 @@ int main() {
                 currentAckNum = currentAckNum + 1;
                 if (resendSynAck == 1)
                 {
-                    currentAckNum = currentAckNum - 1;
+                    //currentAckNum = currentAckNum - 1;
+                    currentAckNum = 2255;
                     resendSynAck = 0;
                 }
                 lastSentAck = currentAckNum;
@@ -185,6 +186,8 @@ int main() {
                     if ( i == 12)
                         header[12] = '\0';
                 }
+
+                // SIMULATE PACKET LOSS
                 // if (useless == 0)
                 //     useless = 1;
                 // else

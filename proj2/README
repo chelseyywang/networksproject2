@@ -1,0 +1,70 @@
+Chelsey Wang
+chelseyywang@gmail.com
+705124638
+
+My Design:
+
+So I used go back N for my server and client. First, I have my client send a SYN,
+then my server will reply with a SYN ACK, and then my client will send its first
+packet with an ACK. This Go-Back-N has a fixed window size of 10, so what I did is
+initially send out 10 packets, and then check if, when reading from server, if I get
+a new ACK, then I can send out a new packet. This way I will only be sending 10 things
+at a time. Next, to handle the issue of dropped packets, I made loops for each scenario -
+dropped SYN, ACK, FIN, and ACK for FIN from client, and dropped SYN ACK, FIN, and ACK
+from server. Generally, I just used a timer that marks the last time I sent one of these
+packets, and read from socket. I use poll so I only read from socket when something is there,
+so I do not get stuck. Once the time goes over .5 sec, and I did not get anything from the
+socket, or what I got from the socket is not what I am expecting, I have a saved variable
+for the last ACK I received from client, and I will reposition my file pointer at that
+ACK and resend out 10 new packets. On server side, to detect if I have dropped packets,
+it checks if the difference between received packet numbers is greater than 512.
+
+
+My Many Problems:
+
+I ran into many problems, with every line I typed. Even just setting up was so difficult.
+I have a Mac, so I had to download VirtualBox and get Ubuntu running. I thought I would just
+make a shared folder so I can make sure my files are not only in Ubuntu.
+However, even creating a shared folder was a challenge. After a lot of Googling, and
+typing random commands, I was finally able to get a shared folder set up. However, the shared
+folder was only accessible by root or a group, and no matter what commands I ran, even with sudo,
+I could not give "other" read write permissions in the folder, so I couldn't use VS Code to code
+in Ubuntu. So I ended up coding on my Mac, which is better and faster anyway, and ran using Ubuntu's
+terminal.
+After setting up my client and server, I had to figure out how to transfer a file. Although it
+seemed simple, I ran into permission errors. It was confusing for me because I had used
+fopen, fread, and fwrite before successfully without having these errors, so at first I did not
+realize it was due to permission errors, but eventually I realized I needed to chmod my file within
+my code.
+Finally, after figuring out my approach to simulating GBN and implementing most of it, I ran
+into issues where I would hang on recvfrom during packet loss scenarios. I realized this could
+only be solved using poll, which would detect if there was any input coming from the socket, so I
+would not hang there waiting for input that would never arrive.
+After learning how to use poll, implementing GBN with packet loss became a lot more clear for me,
+and I was able to mock all the scenarios - client losing SYN, ACK, random packet, FIN, and the last
+ACK, as well as server losing SYN ACK, ACK, and FIN, and create events that would handle all of them.
+Also, when I thought I finished coding, I implemented argument handling -- because I thought that
+is the easiest part, so I can save it for last. However, when I did it, and tried running my
+code with arguments, I got some weird read error that said "Permission denied". However, above I
+had already used chmod to make sure I had permissions to do whatever I wanted with my file.
+So that was a really stressful time because I could not understand how just adding arguments would
+completely break all of the code I worked for far, far too long on.
+Finally I was able to figure out it was because I needed to initialize a parameter in the recvfrom
+call. It was very strange because my code worked fine when I manually wrote my hostname, port number,
+file name but when I passed them in through a c-string it didn't work.
+
+Tutorials:
+
+https://www.thegeekstuff.com/2012/07/c-file-handling/
+https://www.geeksforgeeks.org/snprintf-c-library/
+https://www.geeksforgeeks.org/how-to-append-a-character-to-a-string-in-c/
+https://www.tutorialspoint.com/c_standard_library/c_function_sprintf.htm
+https://www.geeksforgeeks.org/error-handling-c-programs/
+https://www.geeksforgeeks.org/create-shared-folder-host-os-guest-os-virtual-box/
+https://www.geeksforgeeks.org/udp-server-client-implementation-c/
+https://www.includehelp.com/c-programs/fwrite-function-in-c-language-with-example.aspx
+https://www.programmingsimplified.com/c/source-code/c-substring
+https://flaviocopes.com/c-return-string/
+https://www.tutorialspoint.com/c_standard_library/c_function_atoi.htm
+http://releases.ubuntu.com/16.04/
+TA slides, test cases document

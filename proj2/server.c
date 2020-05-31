@@ -22,7 +22,7 @@ void printRecv(char * pbuffer);
 int getAck(char * pbuffer);
 int getSeq(char * pbuffer);
 char * makeHeader(int pintSeqNum, int pintAckNum, char pflags);
-
+int portNum = 8080;
 int currentSeqNum = 221;
 int currentAckNum = 0;
 int lastRecvAck = 0;
@@ -48,6 +48,11 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "Usage: ./server <port number>\n");
         exit(1);
     }
+    else
+    {
+        portNum = atoi(argv[1]);
+    }
+
     int sockfd;
     char buffer[524] = {0};
     int finSent = 0;
@@ -65,7 +70,7 @@ int main(int argc, char* argv[]) {
 
     servaddr.sin_family    = AF_INET; // IPv4
     servaddr.sin_addr.s_addr = INADDR_ANY;
-    servaddr.sin_port = htons(PORT);
+    servaddr.sin_port = htons(portNum);
 
     // Bind the socket with the server address
     if ( bind(sockfd, (const struct sockaddr *)&servaddr,

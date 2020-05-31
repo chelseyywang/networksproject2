@@ -59,9 +59,9 @@ int main(int argc, char* argv[]) {
     fprintf(stderr, "argc: %i\n", argc);
     if (argc == 4)
     {
-        // bzero(hostName, 10);
-        // memcpy(hostName, argv[1], strlen(argv[1]));
-        // portNum = atoi(argv[2]);
+        bzero(hostName, 10);
+        memcpy(hostName, argv[1], strlen(argv[1]));
+        portNum = atoi(argv[2]);
         bzero(fileName, 50);
         memcpy(fileName, argv[3], strlen(argv[3]));
         fprintf(stderr, "host: %s, port: %i, file: %s\n", hostName, atoi(argv[2]), fileName);
@@ -90,7 +90,7 @@ int main(int argc, char* argv[]) {
     memset(&servaddr, 0, sizeof(servaddr));
 
     servaddr.sin_family = AF_INET;
-    servaddr.sin_port = htons(PORT);
+    servaddr.sin_port = htons(portNum);
     bcopy((char *)server->h_addr,
          (char *)&servaddr.sin_addr.s_addr,
          server->h_length);
@@ -106,7 +106,7 @@ int main(int argc, char* argv[]) {
 
     // Sequence Number field, an Acknowledgment Number field, and ACK , SYN , and FIN flags
     int n;
-    unsigned int len;
+    unsigned int len = 0;
     // send first syn
 
     // simulate losing first syn
@@ -879,7 +879,8 @@ int main(int argc, char* argv[]) {
                                     memcpy(header, makeHeader(currentSeqNum, 0, 'c'), 12);
                                     fprintf(stderr, "plan on sending header: %s\n", header);
                                     sendto(sockfd, (const char *) header, 12, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
-                                    printf("RESEND %i 0 FIN\n", currentSeqNum);
+                                    // OG RESEND FIN
+                                    printf("SEND %i 0 FIN\n", currentSeqNum);
                                     clock_gettime(CLOCK_MONOTONIC, &start2);
                                     resendFin = 1;
                                 }

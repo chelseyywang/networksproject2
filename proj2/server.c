@@ -8,10 +8,15 @@
 #include <netinet/in.h>
 #include <errno.h>
 #include <sys/stat.h>
+#include <time.h>
+#include <poll.h>
+
 
 
 #define PORT     8080
 #define MAXLINE 1024
+#define BILLION 1000000000L
+
 
 void printRecv(char * pbuffer);
 int getAck(char * pbuffer);
@@ -25,6 +30,14 @@ int lastSentAck = 0;
 int missingPacket = 0;
 int resendSynAck = 0;
 int roundNum = 0;
+int gross = 0;
+int grossfin = 0;
+long long diff;
+char savedFin[12] = {0};
+int finSeq= 0;
+int finAck = 0;
+int byeclient = 0;
+struct timespec start, end;
 
 int main() {
     int sockfd;
@@ -86,6 +99,17 @@ int main() {
         strncat(modSeqNum, &z, 1);
 
         fprintf(stderr, "Listening for first handshake...\n");
+        int lastRecvAck = 0;
+        lastSentAck = 0;
+        missingPacket = 0;
+        resendSynAck = 0;
+        roundNum = 0;
+        gross = 0;
+        grossfin = 0;
+        diff = 0;
+        finSeq= 0;
+        finAck = 0;
+        byeclient = 0;
         int len, n;
 
         len = sizeof(cliaddr);  //len is value/resuslt
@@ -187,7 +211,7 @@ int main() {
                         header[12] = '\0';
                 }
 
-                // SIMULATE PACKET LOSS
+                // SIMULATE PACKET LOSS Syn Ack
                 // if (useless == 0)
                 //     useless = 1;
                 // else
@@ -201,6 +225,11 @@ int main() {
                 int prevIntSeqNum = 0;
                 while(1)
                 {
+                    if (byeclient == 1)
+                    {
+                        byeclient = 0;
+                        break;
+                    }
                     fprintf(stderr, "Listening for 3 handshake...\n");
 
                     bzero(buffer, 524);
@@ -209,6 +238,11 @@ int main() {
                             MSG_WAITALL, ( struct sockaddr *) &cliaddr,
                             &len);
                     buffer[n] = '\0';
+                    // added this
+                    //lastRecvAck = getAck(buffer);
+
+                    // ^ end old stuff
+
                     if (buffer[11] == 'b')
                     {
                         fprintf(stderr, "got syn instead, synack prolly lost\n");
@@ -222,6 +256,7 @@ int main() {
                         fprintf(stderr, "bye client :( \n");
                         break;
                     }
+
                     if (getAck(buffer) == lastSentAck && missingPacket == 1)
                     {
                         missingPacket = 0;
@@ -356,7 +391,13 @@ int main() {
                         memcpy(header, makeHeader(0, currentAckNum, 'a'), 12);
                     else
                         memcpy(header, makeHeader(currentSeqNum, currentAckNum, 'a'), 12);
-                    sendto(sockfd, (const char *)header, 12, MSG_CONFIRM, (const struct sockaddr *) &cliaddr, len);
+
+                    // simulate losing an ack
+                    // if (gross == 5)
+                    //     fprintf(stderr, "pretend losing %s\n", header);
+                    // else
+                        sendto(sockfd, (const char *)header, 12, MSG_CONFIRM, (const struct sockaddr *) &cliaddr, len);
+                    gross++;
                     //printf("actually sent: %s\n", header);
                     if (buffer[11] == 'n')
                         printf("SEND 0 %i ACK\n", currentAckNum);
@@ -393,11 +434,22 @@ int main() {
                         strncat(modSeqNum, &z, 1);
                         strncat(modAckNum, &flags, 1);
                         sprintf(header, "%s%s", modSeqNum, modAckNum);
-                        sendto(sockfd, (const char *)header, 12, MSG_CONFIRM, (const struct sockaddr *) &cliaddr, len);
+                        // simulate losing FIN
+                        // if (grossfin == 0 )
+                        // {
+                        //     fprintf(stderr, "prtend lose fin\n");
+                        //     grossfin = 1;
+                        // }
+                        // else
+                            sendto(sockfd, (const char *)header, 12, MSG_CONFIRM, (const struct sockaddr *) &cliaddr, len);
                         //printf("actually sent: %s\n", header);
                         printf("SEND %i %i FIN\n", currentSeqNum, intAckNum);
                         //fprintf(stderr, "YOYOO EVEN MAS NUMBAS: %i %i\n", currentAckNum, currentSeqNum);
-
+                        bzero(savedFin, 12);
+                        memcpy(savedFin, header, 12);
+                        finSeq = currentSeqNum;
+                        finAck = intAckNum;
+                        clock_gettime(CLOCK_MONOTONIC, &start);
                         finSent = 1;
                     }
 
@@ -405,7 +457,57 @@ int main() {
                     //printf("hi prev: %i\n", prevIntSeqNum);
                     bzero(buffer, 524);
 
+                    //} // if ret > 0
+                    if (finSent == 1)
+                    {
+                        struct pollfd fds[1];
+                        fds[0].fd = sockfd;
+                        fds[0].events = POLLERR | POLLHUP | POLLIN;
+                        while(1)
+                        {
+                            int ret = poll(fds, 1, 500);
+                            if (ret > 0)
+                            {
+                                if (fds[0].revents & POLLIN)
+                                {
+                                    fprintf(stderr, "reading...\n");
+                                    bzero(buffer, 524);
+                                    n = recvfrom(sockfd, (char *)buffer, 512, MSG_WAITALL, (struct sockaddr *) &servaddr, &len);
+                                    fprintf(stderr, "done reading: %i\n", n);
+                                    if (n < 0 )
+                                    {
+                                        fprintf(stderr, "read error\n");
+                                        continue;
+                                    }
+                                    if (n == 0)
+                                    {
+                                        fprintf(stderr, "got nothin\n");
+                                        continue;
+                                    }
+                                    buffer[n] = '\0';
+                                    printRecv(buffer);
+                                    if (buffer[11] == 'a')
+                                    {
+                                        fprintf(stderr, "bye client :( \n");
+                                        byeclient = 1;
+                                        break;
+                                    }
 
+                                }
+                            }
+                            clock_gettime(CLOCK_MONOTONIC, &end);
+                            diff = BILLION * (end.tv_sec - start.tv_sec) + end.tv_nsec - start.tv_nsec;
+                            if (diff > 500000000)
+                            {
+                                printf("TIMEOUT %i\n", finSeq);
+                                sendto(sockfd, (const char *)savedFin, 12, MSG_CONFIRM, (const struct sockaddr *) &cliaddr, len);
+                                printf("RESEND %i %i FIN\n", finSeq, finAck);
+                                clock_gettime(CLOCK_MONOTONIC, &start);
+                                finSent = 1;
+                            }
+
+                        }
+                    }
                 }
             } // did not get handshake, try again
         } // end while first handshake

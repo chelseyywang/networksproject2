@@ -35,10 +35,14 @@ int readIn = 0;
 int lastlast = 0;
 int lastlastAck = 0;
 int useless = 0;
+int resendFin = 0;
+int acktofin = 0;
 long long diff;
 long long diff2;
+long long diff3;
 struct timespec start, end;
 struct timespec start2, end2;
+struct timespec start3, end3;
 struct timeval t1, t2;
 
 
@@ -80,6 +84,7 @@ int main() {
     int n, len;
     // send first syn
 
+    // simulate losing first syn
     // comment out to mock packet loss
     sendto(sockfd, (const char *) header, 12, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
     clock_gettime(CLOCK_MONOTONIC, &start);
@@ -114,9 +119,7 @@ int main() {
                     fprintf(stderr, "got nothin\n");
                     continue;
                 }
-                //fprintf(stderr, "length of what server sent: %i\n", n);
                 buffer[n] = '\0';
-                //fprintf(stderr, "Server sent: %s\n", buffer);
                 printRecv(buffer);
                 lastRecvSeq = getSeq(buffer);
                 lastRecvAck = getAck(buffer);
@@ -198,6 +201,7 @@ int main() {
                 tempBuff[i+12] = content[i];
             }
 
+            // simulate losing 3rd ack
             // commmented out wrong whoops try agian
             // if (useless == 0)
             //     useless = 1;
@@ -247,6 +251,7 @@ int main() {
                     tempBuff[i+12] = content[i];
                 }
                 // send cmd
+                // simulate losing second packet
                 //fprintf(stderr, "planning on sending this bytes: %i : %s\n", tempBuffLen, tempBuff);
                 // if (i == 2)
                 //     fprintf(stderr, "pretending to lose: %i %i\n", currentSeqNum, currentAckNum);
@@ -689,11 +694,14 @@ int main() {
                         memcpy(finheader, makeHeader(currentSeqNum+1, currentAckNum+1, 'a'), 12);
 
                         char finack[50] = {0};
+                        char dupfinack[50] = {0};
                         sprintf(finack, "SEND %i %i ACK\n", currentSeqNum+1, currentAckNum+1);
+                        sprintf(dupfinack, "SEND %i %i DUP-ACK\n", currentSeqNum+1, currentAckNum+1);
 
                         while(1)
                         {
                             // fprintf(stderr, "LLOKING FOR FINNNNNNN\n");
+                            fprintf(stderr, "ready set fin: %i\n", alreadySentFin);
                             if (alreadySentFin == 0)
                             {
                                 ret = poll(fds, 1, 500);
@@ -839,28 +847,82 @@ int main() {
                                 }
 
                                 // LOST PACKETN E;ASKDF
-
-
-
+                                if ( diff2 > 500000000 && (lastRecvSeq+roundNum*25600-number-2==wholeSize || lastRecvSeq+roundNum*25600-number-1==wholeSize)) //timeout, got ack to client's fin so lost server's fin
+                                {
+                                    bzero(header, 12);
+                                    memcpy(header, makeHeader(currentSeqNum, 0, 'c'), 12);
+                                    fprintf(stderr, "plan on sending header: %s\n", header);
+                                    sendto(sockfd, (const char *) header, 12, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
+                                    printf("RESEND %i 0 FIN\n", currentSeqNum);
+                                    clock_gettime(CLOCK_MONOTONIC, &start2);
+                                    resendFin = 1;
+                                }
 
                             }
                             alreadySentFin = 0;
                             fprintf(stderr, "get seq, number, rounds, wholesize: %i, %i, %i, %i\n", getSeq(buffer), number, roundNum, wholeSize);
                             // if we receive the last ack, signal that all acks have been received
-                            if (getSeq(buffer)+roundNum*25600 - number - 1 == wholeSize) // if everything received
+                            if (getSeq(buffer)+roundNum*25600 - number - 1 == wholeSize && resendFin == 0) // if everything received
                             {
                                 // fprintf(stderr, "suk end\n");
                                 bzero(header, 12);
                                 memcpy(header, makeHeader(currentSeqNum, 0, 'c'), 12);
                                 fprintf(stderr, "plan on sending header: %s\n", header);
+                                // simulate to lose fin
                                 sendto(sockfd, (const char *) header, 12, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
                                 printf("SEND %i 0 FIN\n", currentSeqNum);
+                                // reset timer
+                                clock_gettime(CLOCK_MONOTONIC, &start3);
                             }
                             if (buffer[11] == 'c') // if server sends a fin
                             {
                                 //fprintf(stderr, "this wahat ai wasnna send: %s\n", finheader);
+
+
+                                // simulate lose ack to fin
                                 sendto(sockfd, (const char *) finheader, 12, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
+                                clock_gettime(CLOCK_MONOTONIC, &start3);
                                 printf("%s\n", finack);
+                                clock_gettime(CLOCK_MONOTONIC, &end3);
+                                diff3 = BILLION * (end3.tv_sec - start3.tv_sec) + end2.tv_nsec - start2.tv_nsec;
+                                while(diff3 < 2 * BILLION)
+                                {
+
+                                    ret = poll(fds, 1, 500);
+                                    if (ret > 0)
+                                    {
+                                        if (fds[0].revents & POLLIN)
+                                        {
+                                            fprintf(stderr, "reading...\n");
+                                            bzero(buffer, 524);
+                                            n = recvfrom(sockfd, (char *)buffer, MAXLINE, MSG_WAITALL, (struct sockaddr *) &servaddr, &len);
+                                            lastlast = lastRecvSeq;
+                                            lastRecvSeq = getSeq(buffer);
+                                            lastRecvAck = getAck(buffer);
+                                            fprintf(stderr, "DONE reading: %i\n", n);
+                                            if (n < 0 )
+                                            {
+                                                fprintf(stderr, "read error\n");
+                                                continue;
+                                            }
+                                            if (n == 0)
+                                            {
+                                                fprintf(stderr, "got nothin\n");
+                                                continue;
+                                            }
+                                            printRecv(buffer);
+                                            buffer[n] = '\0';
+                                            if (buffer[11] == 'c')//server sends second fin
+                                            {
+                                                sendto(sockfd, (const char *) finheader, 12, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
+                                                printf("%s\n", dupfinack);
+                                                clock_gettime(CLOCK_MONOTONIC, &start3);
+                                            }
+                                        }
+                                    }
+                                    clock_gettime(CLOCK_MONOTONIC, &end3);
+                                    diff3 = BILLION * (end3.tv_sec - start3.tv_sec) + end3.tv_nsec - start3.tv_nsec;
+                                }
                                 fprintf(stderr, "ok bye server :'( \n");
                                 exit(0);
                             }

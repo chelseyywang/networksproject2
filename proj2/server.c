@@ -37,9 +37,17 @@ char savedFin[12] = {0};
 int finSeq= 0;
 int finAck = 0;
 int byeclient = 0;
+char fileName[50] = {0};
+int fileNum = 1;
+
 struct timespec start, end;
 
-int main() {
+int main(int argc, char* argv[]) {
+    if (argc > 2)
+    {
+        fprintf(stderr, "Usage: ./server <port number>\n");
+        exit(1);
+    }
     int sockfd;
     char buffer[524] = {0};
     int finSent = 0;
@@ -254,6 +262,7 @@ int main() {
                         // check if the seq and ack numbers are correct
                         printRecv(buffer);
                         fprintf(stderr, "bye client :( \n");
+                        fileNum++;
                         break;
                     }
 
@@ -299,13 +308,14 @@ int main() {
                         }
 
                         char buf[100] = "1.file";
-                        FILE *fp = fopen("1.file" , "a");
+                        sprintf(fileName, "%i.file", fileNum);
+                        FILE *fp = fopen(fileName , "a");
                         int errnum;
                         //printf("hiiiiii\n");
                         char mode[] = "0777";
                         int i;
                         i = strtol(mode, 0, 8);
-                        if (chmod ("1.file",i) < 0)
+                        if (chmod (fileName,i) < 0)
                         {
                             fprintf(stderr, "error w chmod\n");
                             perror("Error printed by perror");
@@ -489,6 +499,7 @@ int main() {
                                     if (buffer[11] == 'a')
                                     {
                                         fprintf(stderr, "bye client :( \n");
+                                        fileNum++;
                                         byeclient = 1;
                                         break;
                                     }

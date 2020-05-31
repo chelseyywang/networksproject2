@@ -22,7 +22,9 @@ int getSeq(char * pbuffer);
 char * makeHeader(int pintSeqNum, int pintAckNum, char pflags);
 
 char hostName[10] = "localhost";
+char fileName[50] = {0};
 struct hostent *server;
+int portNum = 8080;
 int currentSeqNum = 0;
 int currentAckNum = 0;
 int lastRecvAck = 0;
@@ -46,11 +48,33 @@ struct timespec start3, end3;
 struct timeval t1, t2;
 
 
-int main() {
+int main(int argc, char* argv[]) {
+
+    // handle arguments
+    if (argc > 4)
+    {
+        fprintf(stderr, "Usage: ./client <hostname> <port> <filename>\n");
+        exit(1);
+    }
+    fprintf(stderr, "argc: %i\n", argc);
+    if (argc == 4)
+    {
+        // bzero(hostName, 10);
+        // memcpy(hostName, argv[1], strlen(argv[1]));
+        // portNum = atoi(argv[2]);
+        bzero(fileName, 50);
+        memcpy(fileName, argv[3], strlen(argv[3]));
+        fprintf(stderr, "host: %s, port: %i, file: %s\n", hostName, atoi(argv[2]), fileName);
+    }
+    else if (argc == 2)
+    {
+        bzero(fileName, 50);
+        memcpy(fileName, argv[1], strlen(argv[1]));
+    }
+    // lets get starteeed
 
     int sockfd;
     char buffer[524] = {0};
-    char *hello = "Hello from client";
     struct sockaddr_in servaddr;
 
     if ( (sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0 ) {
@@ -81,7 +105,8 @@ int main() {
     memcpy(header, makeHeader(number, 0, 'b'), 12);
 
     // Sequence Number field, an Acknowledgment Number field, and ACK , SYN , and FIN flags
-    int n, len;
+    int n;
+    unsigned int len;
     // send first syn
 
     // simulate losing first syn
@@ -108,15 +133,16 @@ int main() {
                 fprintf(stderr, "reading...\n");
                 bzero(buffer, 524);
                 n = recvfrom(sockfd, (char *)buffer, 512, MSG_WAITALL, (struct sockaddr *) &servaddr, &len);
-                fprintf(stderr, "done reading: %i\n", n);
+                fprintf(stderr, "1done reading: %i\n", n);
                 if (n < 0 )
                 {
-                    fprintf(stderr, "read error\n");
+                    fprintf(stderr, "1read error\n");
+                    perror("WHY. \n");
                     continue;
                 }
                 if (n == 0)
                 {
-                    fprintf(stderr, "got nothin\n");
+                    fprintf(stderr, "1got nothin\n");
                     continue;
                 }
                 buffer[n] = '\0';
@@ -171,7 +197,7 @@ int main() {
             currentAckNum = intAckNum;
             // trying to send a whole a$$ file
             char content[512]={0};
-            FILE *fp = fopen("bigfile", "r");
+            FILE *fp = fopen(fileName, "r");
             if (fp == NULL)
             {
                 fprintf(stderr, "Unable to open requested file\n");

@@ -52,6 +52,8 @@ int main(int argc, char* argv[]) {
     {
         portNum = atoi(argv[1]);
     }
+    // generate random
+    int randnumber = (rand() % (25600 - 0 + 1)) + 0;
 
     int sockfd;
     char buffer[524] = {0};
@@ -268,6 +270,7 @@ int main(int argc, char* argv[]) {
                         printRecv(buffer);
                         fprintf(stderr, "bye client :( \n");
                         fileNum++;
+                        fflush(stdout);
                         break;
                     }
 
@@ -286,7 +289,11 @@ int main(int argc, char* argv[]) {
                         currentAckNum = lastSentAck;
                         bzero(header, 12);
                         memcpy(header, makeHeader(currentSeqNum, lastSentAck, 'a'), 12);
-                        sendto(sockfd, (const char *)header, 12, MSG_CONFIRM, (const struct sockaddr *) &cliaddr, len);
+                        // SIMULATE PACKET LOSS DUP ACK
+                        // if (useless == 0)
+                        //     useless = 1;
+                        // else
+                            sendto(sockfd, (const char *)header, 12, MSG_CONFIRM, (const struct sockaddr *) &cliaddr, len);
                         printf("SEND %i %i DUP-ACK\n", currentSeqNum, lastSentAck);
                         continue;
                     }
@@ -305,9 +312,9 @@ int main(int argc, char* argv[]) {
                         int fileBuffSize = n - 12;
 
                         char cwd[100];
-                        if (getcwd(cwd, sizeof(cwd)) != NULL) {
-                            fprintf(stderr, "Current working dir: %s\n", cwd);
-                        } else {
+                        if (getcwd(cwd, sizeof(cwd)) == NULL) {
+                        //     fprintf(stderr, "Current working dir: %s\n", cwd);
+                        // } else {
                             perror("getcwd() error");
                             return 1;
                         }
@@ -412,11 +419,12 @@ int main(int argc, char* argv[]) {
                     //     fprintf(stderr, "pretend losing %s\n", header);
                     // else
                         sendto(sockfd, (const char *)header, 12, MSG_CONFIRM, (const struct sockaddr *) &cliaddr, len);
-                    gross++;
+                    //gross++;
                     //printf("actually sent: %s\n", header);
-                    if (buffer[11] == 'n')
-                        printf("SEND 0 %i ACK\n", currentAckNum);
-                    else
+                    //change here
+                    // if (buffer[11] == 'n')
+                    //     printf("SEND 0 %i ACK\n", currentAckNum);
+                    // else
                         printf("SEND %i %i ACK\n", currentSeqNum, currentAckNum);
                     //currentSeqNum = intSeqNum;
                     //currentAckNum = intAckNum;
@@ -506,6 +514,7 @@ int main(int argc, char* argv[]) {
                                         fprintf(stderr, "bye client :( \n");
                                         fileNum++;
                                         byeclient = 1;
+                                        fflush(stdout);
                                         break;
                                     }
 

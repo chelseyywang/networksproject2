@@ -46,6 +46,8 @@ struct timespec start, end;
 struct timespec start2, end2;
 struct timespec start3, end3;
 struct timeval t1, t2;
+int ip = 0;
+int moreuseless = 0;
 
 
 int main(int argc, char* argv[]) {
@@ -59,18 +61,23 @@ int main(int argc, char* argv[]) {
     fprintf(stderr, "argc: %i\n", argc);
     if (argc == 4)
     {
+        if (argv[1][0] == '1')
+            ip = 1;
         bzero(hostName, 10);
         memcpy(hostName, argv[1], strlen(argv[1]));
         portNum = atoi(argv[2]);
         bzero(fileName, 50);
         memcpy(fileName, argv[3], strlen(argv[3]));
         fprintf(stderr, "host: %s, port: %i, file: %s\n", hostName, atoi(argv[2]), fileName);
+
     }
     else if (argc == 2)
     {
         bzero(fileName, 50);
         memcpy(fileName, argv[1], strlen(argv[1]));
     }
+    // generate random ACK
+    int randnumber = (rand() % (25600 - 0 + 1)) + 0;
     // lets get starteeed
 
     int sockfd;
@@ -91,10 +98,12 @@ int main(int argc, char* argv[]) {
 
     servaddr.sin_family = AF_INET;
     servaddr.sin_port = htons(portNum);
-    bcopy((char *)server->h_addr,
-         (char *)&servaddr.sin_addr.s_addr,
-         server->h_length);
-    // servaddr.sin_addr.s_addr = INADDR_ANY;
+    if (ip == 1)
+        servaddr.sin_addr.s_addr = inet_addr(hostName);
+    else
+        bcopy((char *)server->h_addr,
+            (char *)&servaddr.sin_addr.s_addr,
+            server->h_length);
 
     // generate random ACK
     int number = (rand() % (25600 - 0 + 1)) + 0;
@@ -539,7 +548,14 @@ int main(int argc, char* argv[]) {
                         tempBuff[i+12] = content[i];
                     }
                     // send cmd
-                    sendto(sockfd, (const char *) tempBuff, tempBuffLen, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
+                    // SIMULATE RANDOM PACKET LOSS
+                    // if (moreuseless == 0)
+                    //     {
+                    //         moreuseless = 1;
+                    //         fprintf(stderr, "simulate packet loss\n");
+                    //     }
+                    // else
+                        sendto(sockfd, (const char *) tempBuff, tempBuffLen, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
                     printf("SEND %i %i\n", currentSeqNum, 0);
                     currentSeqNum = currentSeqNum + contentLen;
                     if (currentSeqNum > 25600)
@@ -724,6 +740,8 @@ int main(int argc, char* argv[]) {
                         sprintf(finack, "SEND %i %i ACK\n", currentSeqNum+1, currentAckNum+1);
                         sprintf(dupfinack, "SEND %i %i DUP-ACK\n", currentSeqNum+1, currentAckNum+1);
 
+                        int llRecvSeqNumBool = 0;
+                        int llRecvSeqNum = 0;
                         while(1)
                         {
                             // fprintf(stderr, "LLOKING FOR FINNNNNNN\n");
@@ -755,6 +773,7 @@ int main(int argc, char* argv[]) {
                                         printRecv(buffer);
                                         buffer[n] = '\0';
                                         fprintf(stderr, "what i just read: %s\n", buffer);
+                                        llRecvSeqNumBool = 0;
                                     }
                                 }
 
@@ -775,6 +794,18 @@ int main(int argc, char* argv[]) {
                                 fprintf(stderr, "end2: %ld\n", end2.tv_sec);
                                 fprintf(stderr, "diff2: %lld\n", diff2);
                                 fprintf(stderr, "get seq num: %i\n", lastRecvSeq);
+                                if (llRecvSeqNumBool == 5)
+                                {
+                                    llRecvSeqNum = lastRecvSeq;
+                                    llRecvSeqNumBool = 0;
+                                }
+                                else
+                                {
+                                    llRecvSeqNumBool++;
+                                    fprintf(stderr, "llbool: %i\n", llRecvSeqNumBool);
+                                }
+
+
                                 fprintf(stderr, "lastlast: %i\n", lastlast);
                                 if (diff2 > 50000000 && buffer[11] == 'd')
                                 {
@@ -823,7 +854,9 @@ int main(int argc, char* argv[]) {
                                     }
                                     clock_gettime(CLOCK_MONOTONIC, &start2);
                                 }
-                                if ( diff2 > 500000000 && lastRecvSeq == lastlast) //timeout, getting same ACKs
+                                // second param is new
+                                // || diff2>500000000 && lastRecvSeq == llRecvSeqNum
+                                if ( (diff2 > 500000000 && lastRecvSeq == lastlast) || (diff2>500000000 && lastRecvSeq == llRecvSeqNum)) //timeout, getting same ACKs
                                 {
                                     fprintf(stderr, "timer is over .5 sec\n");
                                     fprintf(stderr, "last seq, roundnum: %i %i\n", lastRecvSeq, roundNum);
@@ -891,7 +924,7 @@ int main(int argc, char* argv[]) {
                             // if we receive the last ack, signal that all acks have been received
                             if (getSeq(buffer)+roundNum*25600 - number - 1 == wholeSize && resendFin == 0) // if everything received
                             {
-                                // fprintf(stderr, "suk end\n");
+                                fprintf(stderr, "suk end\n");
                                 bzero(header, 12);
                                 memcpy(header, makeHeader(currentSeqNum, 0, 'c'), 12);
                                 fprintf(stderr, "plan on sending header: %s\n", header);
@@ -909,7 +942,7 @@ int main(int argc, char* argv[]) {
                                 // simulate lose ack to fin
                                 sendto(sockfd, (const char *) finheader, 12, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
                                 clock_gettime(CLOCK_MONOTONIC, &start3);
-                                printf("%s\n", finack);
+                                printf("%s", finack);
                                 clock_gettime(CLOCK_MONOTONIC, &end3);
                                 diff3 = BILLION * (end3.tv_sec - start3.tv_sec) + end2.tv_nsec - start2.tv_nsec;
                                 while(diff3 < 2 * BILLION)
@@ -942,7 +975,7 @@ int main(int argc, char* argv[]) {
                                             if (buffer[11] == 'c')//server sends second fin
                                             {
                                                 sendto(sockfd, (const char *) finheader, 12, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
-                                                printf("%s\n", dupfinack);
+                                                printf("%s", dupfinack);
                                                 clock_gettime(CLOCK_MONOTONIC, &start3);
                                             }
                                         }
@@ -950,6 +983,7 @@ int main(int argc, char* argv[]) {
                                     clock_gettime(CLOCK_MONOTONIC, &end3);
                                     diff3 = BILLION * (end3.tv_sec - start3.tv_sec) + end3.tv_nsec - start3.tv_nsec;
                                 }
+                                fflush(stdout);
                                 fprintf(stderr, "ok bye server :'( \n");
                                 exit(0);
                             }

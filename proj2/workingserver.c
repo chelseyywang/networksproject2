@@ -8,17 +8,53 @@
 #include <netinet/in.h>
 #include <errno.h>
 #include <sys/stat.h>
+#include <time.h>
+#include <poll.h>
+
 
 
 #define PORT     8080
 #define MAXLINE 1024
+#define BILLION 1000000000L
+
 
 void printRecv(char * pbuffer);
 int getAck(char * pbuffer);
 int getSeq(char * pbuffer);
 char * makeHeader(int pintSeqNum, int pintAckNum, char pflags);
+int portNum = 8080;
+int currentSeqNum = 221;
+int currentAckNum = 0;
+int lastRecvAck = 0;
+int lastSentAck = 0;
+int missingPacket = 0;
+int resendSynAck = 0;
+int roundNum = 0;
+int gross = 0;
+int grossfin = 0;
+long long diff;
+char savedFin[12] = {0};
+int finSeq= 0;
+int finAck = 0;
+int byeclient = 0;
+char fileName[50] = {0};
+int fileNum = 1;
 
-int main() {
+struct timespec start, end;
+
+int main(int argc, char* argv[]) {
+    if (argc > 2)
+    {
+        fprintf(stderr, "Usage: ./server <port number>\n");
+        exit(1);
+    }
+    else
+    {
+        portNum = atoi(argv[1]);
+    }
+    // generate random
+    int randnumber = (rand() % (25600 - 0 + 1)) + 0;
+
     int sockfd;
     char buffer[524] = {0};
     int finSent = 0;
@@ -36,7 +72,7 @@ int main() {
 
     servaddr.sin_family    = AF_INET; // IPv4
     servaddr.sin_addr.s_addr = INADDR_ANY;
-    servaddr.sin_port = htons(PORT);
+    servaddr.sin_port = htons(portNum);
 
     // Bind the socket with the server address
     if ( bind(sockfd, (const struct sockaddr *)&servaddr,
@@ -77,13 +113,24 @@ int main() {
         memcpy(modSeqNum, seqNum, 5);
         strncat(modSeqNum, &z, 1);
 
-        printf("Listening for first handshake...\n");
+        fprintf(stderr, "Listening for first handshake...\n");
+        int lastRecvAck = 0;
+        lastSentAck = 0;
+        missingPacket = 0;
+        resendSynAck = 0;
+        roundNum = 0;
+        gross = 0;
+        grossfin = 0;
+        diff = 0;
+        finSeq= 0;
+        finAck = 0;
+        byeclient = 0;
         int len, n;
 
         len = sizeof(cliaddr);  //len is value/resuslt
         n = recvfrom(sockfd, (char *)buffer, MAXLINE, MSG_WAITALL, ( struct sockaddr *) &cliaddr, &len);
         buffer[n] = '\0';
-        fprintf(stderr, "client sent : %s\n", buffer);
+        //fprintf(stderr, "client sent : %s\n", buffer);
         bzero(modAckNum, 6);
         for (int i = 0; i < 5; i++)
         {
@@ -99,8 +146,10 @@ int main() {
                 strncat(recmodSeqNum, &buffer[i], 1); // save all digits into modSeqNum
         }
         int intSeqNum = atoi(recmodSeqNum); // turn to int; get incremented in string form
+
+        lastRecvAck = intAckNum;
         if (buffer[11] == 'a')
-                printf("RECV %i %i ACK\n", intAckNum, intSeqNum);
+            printf("RECV %i %i ACK\n", intAckNum, intSeqNum);
         if (buffer[11] == 'b')
             printf("RECV %i %i SYN\n", intAckNum, intSeqNum);
         if (buffer[11] == 'c')
@@ -113,6 +162,13 @@ int main() {
             printf("RECV %i %i SYN FIN\n", intAckNum, intSeqNum);
         if (buffer[11] == 'g')
             printf("RECV %i %i SYN FIN ACK\n", intAckNum, intSeqNum);
+
+        intAckNum = getAck(buffer);
+        currentAckNum = intAckNum;
+        intSeqNum = getSeq(buffer);
+        currentSeqNum = intSeqNum;
+        //fprintf(stderr, "YOYOO BISHH HERE DA NUMBAS: %i %i\n", intAckNum, intSeqNum);
+        int useless = 0;
         while(1) // wait for client to send first handshake
         {
             if (finSent == 1)
@@ -122,15 +178,22 @@ int main() {
             {
                 // parse header
 
-                intAckNum = intAckNum + 1;
-                int ackNumLen = sprintf(ackNum, "%i", intAckNum); // turn int to string seqNum; get its length
+                currentAckNum = currentAckNum + 1;
+                if (resendSynAck == 1)
+                {
+                    //currentAckNum = currentAckNum - 1;
+                    currentAckNum = 2255;
+                    resendSynAck = 0;
+                }
+                lastSentAck = currentAckNum;
+                int ackNumLen = sprintf(ackNum, "%i", currentAckNum); // turn int to string seqNum; get its length
                 int numZ = 5 - ackNumLen;
                 bzero(modAckNum, 6);
                 memcpy(modAckNum, ackNum, ackNumLen);
                 for (int i = 0; i < numZ; i++)
                     strncat(modAckNum, &z, 1); // add correct amt of Z's
                 // shake back; send syn + ack
-                printf("sent - ACK SYN \n");
+                //printf("sent - ACK SYN \n");
                 flags = 'd';
                 bzero(header, 12);
                 strncat(modAckNum, &flags, 1);
@@ -155,24 +218,34 @@ int main() {
                     if (i == 5 && header[i] != 'z')
                     {
                         sir = 1;
-                        fprintf(stderr, "HEADER FA;SLDKFJ\n");
+                        //fprintf(stderr, "HEADER FA;SLDKFJ\n");
                     }
                     if (sir == 1)
                         header[i] = header[i+1];
                     if ( i == 12)
                         header[12] = '\0';
                 }
-                sendto(sockfd, (const char *)header, 12,
-                MSG_CONFIRM, (const struct sockaddr *) &cliaddr,
-                    len);
 
-                fprintf(stderr, "server sent: %s\n", header);
-                printf("SEND 221 %i SYN ACK\n", intAckNum);
-                printf("Listening for third handshake...\n");
+                // SIMULATE PACKET LOSS Syn Ack
+                // if (useless == 0)
+                //     useless = 1;
+                // else
+                    sendto(sockfd, (const char *)header, 12, MSG_CONFIRM, (const struct sockaddr *) &cliaddr, len);
+
+                //fprintf(stderr, "server sent: %s\n", header);
+                printf("SEND 221 %i SYN ACK\n", currentAckNum);
+                currentSeqNum = 221;
+                fprintf(stderr, "Listening for third handshake...\n");
+                currentSeqNum = currentSeqNum + 1;
                 int prevIntSeqNum = 0;
                 while(1)
                 {
-                                    printf("Listening for 3 handshake...\n");
+                    if (byeclient == 1)
+                    {
+                        byeclient = 0;
+                        break;
+                    }
+                    fprintf(stderr, "Listening for 3 handshake...\n");
 
                     bzero(buffer, 524);
                     // reading third handshake from client
@@ -180,19 +253,53 @@ int main() {
                             MSG_WAITALL, ( struct sockaddr *) &cliaddr,
                             &len);
                     buffer[n] = '\0';
+                    // added this
+                    //lastRecvAck = getAck(buffer);
+
+                    // ^ end old stuff
+
+                    if (buffer[11] == 'b')
+                    {
+                        fprintf(stderr, "got syn instead, synack prolly lost\n");
+                        resendSynAck = 1;
+                        break;
+                    }
                     if (finSent == 1 && buffer[11] == 'a')
                     {
                         // check if the seq and ack numbers are correct
                         printRecv(buffer);
                         fprintf(stderr, "bye client :( \n");
+                        fileNum++;
+                        fflush(stdout);
                         break;
                     }
-                    if (buffer[11] == 'a') // if client sends an ACK
+
+                    if (getAck(buffer) == lastSentAck && missingPacket == 1)
+                    {
+                        missingPacket = 0;
+                        fprintf(stderr, "got the missing packet ! %i\n", getAck(buffer));
+                    }
+                    fprintf(stderr, "got: %i lastrecvack: %i\n", getAck(buffer), lastRecvAck);
+
+                    if (getAck(buffer) - lastRecvAck > 512 || missingPacket == 1)
+                    {
+                        printRecv(buffer);
+                        fprintf(stderr, "we are missing a packet\n");
+                        fprintf(stderr, "got: %i lastrecvack: %i\n", getAck(buffer), lastRecvAck);
+                        currentAckNum = lastSentAck;
+                        bzero(header, 12);
+                        memcpy(header, makeHeader(currentSeqNum, lastSentAck, 'a'), 12);
+                        sendto(sockfd, (const char *)header, 12, MSG_CONFIRM, (const struct sockaddr *) &cliaddr, len);
+                        printf("SEND %i %i DUP-ACK\n", currentSeqNum, lastSentAck);
+                        continue;
+                    }
+                    lastRecvAck = getAck(buffer);
+                    if (buffer[11] == 'a' || buffer[11] == 'n') // if client sends an ACK
                     {
                         //fprintf(stderr, "Client3 : %s\n", buffer);
                         char fileBuff[512] = {0};
                         int c = 0;
-                        fprintf(stderr, "this is n: %i\n", n);
+                        //fprintf(stderr, "this is n: %i\n", n);
                         while (c+12 < n)
                         {
                             fileBuff[c] = buffer[12+c];
@@ -201,21 +308,22 @@ int main() {
                         int fileBuffSize = n - 12;
 
                         char cwd[100];
-                        if (getcwd(cwd, sizeof(cwd)) != NULL) {
-                            printf("Current working dir: %s\n", cwd);
-                        } else {
+                        if (getcwd(cwd, sizeof(cwd)) == NULL) {
+                        //     fprintf(stderr, "Current working dir: %s\n", cwd);
+                        // } else {
                             perror("getcwd() error");
                             return 1;
                         }
 
                         char buf[100] = "1.file";
-                        FILE *fp = fopen("1.file" , "a");
+                        sprintf(fileName, "%i.file", fileNum);
+                        FILE *fp = fopen(fileName , "a");
                         int errnum;
-                        printf("hiiiiii\n");
+                        //printf("hiiiiii\n");
                         char mode[] = "0777";
                         int i;
                         i = strtol(mode, 0, 8);
-                        if (chmod ("1.file",i) < 0)
+                        if (chmod (fileName,i) < 0)
                         {
                             fprintf(stderr, "error w chmod\n");
                             perror("Error printed by perror");
@@ -234,59 +342,104 @@ int main() {
                         //fprintf(stderr, "sketych last byte: %c\n", fileBuff[fileBuffSize-1]);
                         fclose(fp);
                     } // end if ack
+                    printRecv(buffer);
 
 
 
-                        bzero(modAckNum, 6);
-                        for (int i = 0; i < 5; i++)
+                    intAckNum = intAckNum + n - 12;
+                    currentAckNum = currentAckNum + n - 12;
+                    if (currentAckNum > 25600)
+                    {
+                        currentAckNum = currentAckNum - 25600;
+                        roundNum++;
+                    }
+                    if (intAckNum > 25600)
+                    {
+                        intAckNum = intAckNum - 25600;
+                        roundNum++;
+                    }
+                    //currentSeqNum = intSeqNum;
+                    if (buffer[11] == 'c') // if client sends a FIN
+                    {
+                        fprintf(stderr, "got fin from the client\n");
+                        intAckNum = intAckNum + 1;
+                        if (intAckNum > 25600)
                         {
-                            if (buffer[i] != 'z') //if digit
-                                strncat(modAckNum, &buffer[i], 1); // save all digits into modSeqNum
+                            intAckNum = intAckNum - 25600;
+                            roundNum++;
                         }
-                        intAckNum = atoi(modAckNum); // turn to int; get incremented in string form
-                        bzero(modSeqNum, 6);
-                        for (int i = 6; i < 12; i++)
+                        currentAckNum = currentAckNum + 1;
+                        if (currentAckNum > 25600)
                         {
-                            if (buffer[i] != 'z') //if digit
-                                strncat(modSeqNum, &buffer[i], 1); // save all digits into modSeqNum
+                            currentAckNum = currentAckNum - 25600;
+                            roundNum++;
                         }
-                        intSeqNum = atoi(modSeqNum); // turn to int; get incremented in string form
-                        if (buffer[11] == 'a')
-                            printf("RECV %i %i ACK\n", intAckNum, intSeqNum);
-                        if (buffer[11] == 'b')
-                            printf("RECV %i %i SYN\n", intAckNum, intSeqNum);
-                        if (buffer[11] == 'c')
-                            printf("RECV %i %i FIN\n", intAckNum, intSeqNum);
-                        if (buffer[11] == 'd')
-                            printf("RECV %i %i SYN ACK\n", intAckNum, intSeqNum);
-                        if (buffer[11] == 'e')
-                            printf("RECV %i %i FIN ACK\n", intAckNum, intSeqNum);
-                        if (buffer[11] == 'f')
-                            printf("RECV %i %i SYN FIN\n", intAckNum, intSeqNum);
-                        if (buffer[11] == 'g')
-                            printf("RECV %i %i SYN FIN ACK\n", intAckNum, intSeqNum);
-                        intAckNum = intAckNum + n - 12;
-
-                        if (buffer[11] == 'c') // if client sends a FIN
-                        {
-                            fprintf(stderr, "got fin from the client\n");
-                            intAckNum = intAckNum + 1;
-                        }
+                    }
 
 
-                        flags = 'a';
+
+                    lastSentAck = currentAckNum;
+                    flags = 'a';
+                    ackNumLen = sprintf(ackNum, "%i", currentAckNum); // turn int to string seqNum; get its length
+                    numZ = 5 - ackNumLen;
+                    bzero(modAckNum, 6);
+                    memcpy(modAckNum, ackNum, ackNumLen);
+                    int seqNumLen = sprintf(seqNum, "%i", currentSeqNum); // turn int to string seqNum; get its length
+                    // if (buffer[11] == 'c')
+                    //     {
+                    //         bzero(seqNum, 5);
+                    //         seqNumLen = sprintf(seqNum, "%i", prevIntSeqNum);
+                    //         currentSeqNum = prevIntSeqNum;
+                    //     }
+                    int numSZ = 5 - seqNumLen;
+                    bzero(modSeqNum, 6);
+                    memcpy(modSeqNum, seqNum, seqNumLen);
+                    //  printf("hi prev3: %s\n", modSeqNum);
+
+                    for (int i = 0; i < numZ; i++)
+                        strncat(modAckNum, &z, 1); // add correct amt of Z's
+                    for (int i = 0; i < numSZ; i++)
+                        strncat(modSeqNum, &z, 1); // add correct amt of Z's
+                    bzero(header, 12);
+                    strncat(modSeqNum, &z, 1);
+                    strncat(modAckNum, &flags, 1);
+                    //sprintf(header, "%s%s", modSeqNum, modAckNum);
+                    // HAHAHAHAHAH OOH
+                    if (buffer[11] == 'n')
+                        memcpy(header, makeHeader(0, currentAckNum, 'a'), 12);
+                    else
+                        memcpy(header, makeHeader(currentSeqNum, currentAckNum, 'a'), 12);
+
+                    // simulate losing an ack
+                    // if (gross == 5)
+                    //     fprintf(stderr, "pretend losing %s\n", header);
+                    // else
+                        sendto(sockfd, (const char *)header, 12, MSG_CONFIRM, (const struct sockaddr *) &cliaddr, len);
+                    //gross++;
+                    //printf("actually sent: %s\n", header);
+                    //change here
+                    // if (buffer[11] == 'n')
+                    //     printf("SEND 0 %i ACK\n", currentAckNum);
+                    // else
+                        printf("SEND %i %i ACK\n", currentSeqNum, currentAckNum);
+                    //currentSeqNum = intSeqNum;
+                    //currentAckNum = intAckNum;
+                    //fprintf(stderr, "YOYOO more NUMBAS: %i %i\n", currentSeqNum, currentAckNum);
+
+
+                    // send my fin
+                    if (buffer[11] == 'c')
+                    {
+                        flags = 'c';
+                        intAckNum = 0;
                         ackNumLen = sprintf(ackNum, "%i", intAckNum); // turn int to string seqNum; get its length
                         numZ = 5 - ackNumLen;
                         bzero(modAckNum, 6);
                         memcpy(modAckNum, ackNum, ackNumLen);
-                        int seqNumLen = sprintf(seqNum, "%i", intSeqNum); // turn int to string seqNum; get its length
-                        if (buffer[11] == 'c')
-                            {
                                 bzero(seqNum, 5);
                                 // printf("hi prev2: %i\n", prevIntSeqNum);
-                                seqNumLen = sprintf(seqNum, "%i", prevIntSeqNum);
+                                seqNumLen = sprintf(seqNum, "%i", currentSeqNum);
                                 intSeqNum = prevIntSeqNum;
-                            }
                         int numSZ = 5 - seqNumLen;
                         bzero(modSeqNum, 6);
                         memcpy(modSeqNum, seqNum, seqNumLen);
@@ -300,47 +453,82 @@ int main() {
                         strncat(modSeqNum, &z, 1);
                         strncat(modAckNum, &flags, 1);
                         sprintf(header, "%s%s", modSeqNum, modAckNum);
-                        sendto(sockfd, (const char *)header, 12, MSG_CONFIRM, (const struct sockaddr *) &cliaddr, len);
-                        printf("actually sent: %s\n", header);
-                        printf("SEND %i %i ACK\n", intSeqNum, intAckNum);
-
-                        // send my fin
-                        if (buffer[11] == 'c')
-                        {
-                            flags = 'c';
-                            intAckNum = 0;
-                            ackNumLen = sprintf(ackNum, "%i", intAckNum); // turn int to string seqNum; get its length
-                            numZ = 5 - ackNumLen;
-                            bzero(modAckNum, 6);
-                            memcpy(modAckNum, ackNum, ackNumLen);
-                                    bzero(seqNum, 5);
-                                    // printf("hi prev2: %i\n", prevIntSeqNum);
-                                    seqNumLen = sprintf(seqNum, "%i", prevIntSeqNum);
-                                    intSeqNum = prevIntSeqNum;
-                            int numSZ = 5 - seqNumLen;
-                            bzero(modSeqNum, 6);
-                            memcpy(modSeqNum, seqNum, seqNumLen);
-                            //  printf("hi prev3: %s\n", modSeqNum);
-
-                            for (int i = 0; i < numZ; i++)
-                                strncat(modAckNum, &z, 1); // add correct amt of Z's
-                            for (int i = 0; i < numSZ; i++)
-                                strncat(modSeqNum, &z, 1); // add correct amt of Z's
-                            bzero(header, 12);
-                            strncat(modSeqNum, &z, 1);
-                            strncat(modAckNum, &flags, 1);
-                            sprintf(header, "%s%s", modSeqNum, modAckNum);
+                        // simulate losing FIN
+                        // if (grossfin == 0 )
+                        // {
+                        //     fprintf(stderr, "prtend lose fin\n");
+                        //     grossfin = 1;
+                        // }
+                        // else
                             sendto(sockfd, (const char *)header, 12, MSG_CONFIRM, (const struct sockaddr *) &cliaddr, len);
-                            printf("actually sent: %s\n", header);
-                            printf("SEND %i %i FIN\n", intSeqNum, intAckNum);
-                            finSent = 1;
+                        //printf("actually sent: %s\n", header);
+                        printf("SEND %i %i FIN\n", currentSeqNum, intAckNum);
+                        //fprintf(stderr, "YOYOO EVEN MAS NUMBAS: %i %i\n", currentAckNum, currentSeqNum);
+                        bzero(savedFin, 12);
+                        memcpy(savedFin, header, 12);
+                        finSeq = currentSeqNum;
+                        finAck = intAckNum;
+                        clock_gettime(CLOCK_MONOTONIC, &start);
+                        finSent = 1;
+                    }
+
+                    prevIntSeqNum = intSeqNum;
+                    //printf("hi prev: %i\n", prevIntSeqNum);
+                    bzero(buffer, 524);
+
+                    //} // if ret > 0
+                    if (finSent == 1)
+                    {
+                        struct pollfd fds[1];
+                        fds[0].fd = sockfd;
+                        fds[0].events = POLLERR | POLLHUP | POLLIN;
+                        while(1)
+                        {
+                            int ret = poll(fds, 1, 500);
+                            if (ret > 0)
+                            {
+                                if (fds[0].revents & POLLIN)
+                                {
+                                    fprintf(stderr, "reading...\n");
+                                    bzero(buffer, 524);
+                                    n = recvfrom(sockfd, (char *)buffer, 512, MSG_WAITALL, (struct sockaddr *) &servaddr, &len);
+                                    fprintf(stderr, "done reading: %i\n", n);
+                                    if (n < 0 )
+                                    {
+                                        fprintf(stderr, "read error\n");
+                                        continue;
+                                    }
+                                    if (n == 0)
+                                    {
+                                        fprintf(stderr, "got nothin\n");
+                                        continue;
+                                    }
+                                    buffer[n] = '\0';
+                                    printRecv(buffer);
+                                    if (buffer[11] == 'a')
+                                    {
+                                        fprintf(stderr, "bye client :( \n");
+                                        fileNum++;
+                                        byeclient = 1;
+                                        fflush(stdout);
+                                        break;
+                                    }
+
+                                }
+                            }
+                            clock_gettime(CLOCK_MONOTONIC, &end);
+                            diff = BILLION * (end.tv_sec - start.tv_sec) + end.tv_nsec - start.tv_nsec;
+                            if (diff > 500000000)
+                            {
+                                printf("TIMEOUT %i\n", finSeq);
+                                sendto(sockfd, (const char *)savedFin, 12, MSG_CONFIRM, (const struct sockaddr *) &cliaddr, len);
+                                printf("RESEND %i %i FIN\n", finSeq, finAck);
+                                clock_gettime(CLOCK_MONOTONIC, &start);
+                                finSent = 1;
+                            }
+
                         }
-
-                        prevIntSeqNum = intSeqNum;
-                        printf("hi prev: %i\n", prevIntSeqNum);
-                        bzero(buffer, 524);
-
-
+                    }
                 }
             } // did not get handshake, try again
         } // end while first handshake
@@ -388,6 +576,8 @@ void printRecv(char* pbuffer)
         printf("RECV %i %i SYN FIN\n", pintAckNum, pintSeqNum);
     if (pbuffer[11] == 'g')
         printf("RECV %i %i SYN FIN ACK\n", pintAckNum, pintSeqNum);
+    if (pbuffer[11] == 'n')
+        printf("RECV %i %i\n", pintAckNum, pintSeqNum);
 }
 
 int getAck(char * pbuffer)

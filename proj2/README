@@ -52,9 +52,14 @@ completely break all of the code I worked for far, far too long on.
 Finally I was able to figure out it was because I needed to initialize a parameter in the recvfrom
 call. It was very strange because my code worked fine when I manually wrote my hostname, port number,
 file name but when I passed them in through a c-string it didn't work.
+Lastly, I tested it with tc. Unfortunately it sometimes works and sometimes doesn't. However I feel
+I have made more than enough progress on this project and spent far, far too many hours on this project
+to continue. I think I basically understand the point of the project and how I can implement things,
+and if I had to do it again, my code would be much, much simpler and cleaner.
 
 Tutorials:
 
+https://www.geeksforgeeks.org/udp-server-client-implementation-c/
 https://www.thegeekstuff.com/2012/07/c-file-handling/
 https://www.geeksforgeeks.org/snprintf-c-library/
 https://www.geeksforgeeks.org/how-to-append-a-character-to-a-string-in-c/

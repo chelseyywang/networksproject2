@@ -48,6 +48,8 @@ struct timespec start3, end3;
 struct timeval t1, t2;
 int ip = 0;
 int moreuseless = 0;
+int lastSentSeq = 0;
+int lastRoundNum = 0;
 
 
 int main(int argc, char* argv[]) {
@@ -106,8 +108,8 @@ int main(int argc, char* argv[]) {
             server->h_length);
 
     // generate random ACK
-    int number = (rand() % (25600 - 0 + 1)) + 0;
-    number = 2254;
+    int number = 2254;
+    lastSentSeq = number;
     // getting header values initialized
     char header[12] = {0};
     bzero(header, 12);
@@ -121,7 +123,6 @@ int main(int argc, char* argv[]) {
     // simulate losing first syn
     // comment out to mock packet loss
     sendto(sockfd, (const char *) header, 12, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
-    fprintf(stderr, "sent: %s\n", header);
     clock_gettime(CLOCK_MONOTONIC, &start);
     fprintf(stderr, "sent header: %s\n", header);
 
@@ -177,7 +178,6 @@ int main(int argc, char* argv[]) {
             bzero(header, 12);
             memcpy(header, makeHeader(number, 0, 'b'), 12);
             sendto(sockfd, (const char *) header, 12, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
-            fprintf(stderr, "sent: %s\n", header);
             clock_gettime(CLOCK_MONOTONIC, &start);
             currentSeqNum = number;
             currentAckNum = 0;
@@ -244,7 +244,6 @@ int main(int argc, char* argv[]) {
             //     useless = 1;
             // else
                 sendto(sockfd, (const char *) tempBuff, tempBuffLen, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
-                fprintf(stderr, "sent: %s\n", header);
             //fprintf(stderr, "sent this: %s\n", tempBuff);
             printf("SEND %i %i ACK\n", intSeqNum, intAckNum);
             bzero(tempBuff, 524);
@@ -253,6 +252,8 @@ int main(int argc, char* argv[]) {
             // JUST SENT FIRST DATA PACKET; START TIMER
             clock_gettime(CLOCK_MONOTONIC, &start2);
 
+            lastSentSeq = intSeqNum;
+            lastRoundNum = roundNum;
 
             currentSeqNum = currentSeqNum + contentLen;
             if (currentSeqNum > 25600)
@@ -265,7 +266,7 @@ int main(int argc, char* argv[]) {
             // nine more packets left
             for (int i = 0; i < 9; i++)
             {
-                // new schtufff
+                //  schtufff
                 if (feof(fp))
                 {
                     fprintf(stderr, "initial window done boyyys \n");
@@ -279,7 +280,7 @@ int main(int argc, char* argv[]) {
                 tempBuffLen = contentLen + 12;
                 bzero(header, 12);
                 memcpy(header, makeHeader(currentSeqNum, 0, 'n'), 12);
-                // new way
+                //  way
                 for (int i = 0; i < 12; i++)
                 {
                     tempBuff[i] = header[i];
@@ -295,8 +296,10 @@ int main(int argc, char* argv[]) {
                 //     fprintf(stderr, "pretending to lose: %i %i\n", currentSeqNum, currentAckNum);
                 // else
                     sendto(sockfd, (const char *) tempBuff, tempBuffLen, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
-                    fprintf(stderr, "sent: %s\n", header);
                 printf("SEND %i %i\n", currentSeqNum, 0);
+                fprintf(stderr, "send roundnum: %i\n", roundNum);
+                lastSentSeq = currentSeqNum;
+                lastRoundNum = roundNum;
                 currentSeqNum = currentSeqNum + contentLen;
                 if (currentSeqNum > 25600)
                 {
@@ -318,7 +321,8 @@ int main(int argc, char* argv[]) {
                     {
                         fprintf(stderr, "wantherereading...\n");
                         bzero(buffer, 524);
-                        if (currentSeqNum +25600*roundNum - number - 1 < wholeSize)
+                        // new parameter risky
+                        if ((currentSeqNum +25600*roundNum - number - 1 < wholeSize) )//|| (currentSeqNum+25600*(roundNum-1)-number-1 < wholeSize))
                             {
                                 n = recvfrom(sockfd, (char *)buffer, MAXLINE, MSG_WAITALL, (struct sockaddr *) &servaddr, &len);
                                 lastlast = lastRecvSeq;
@@ -370,7 +374,7 @@ int main(int argc, char* argv[]) {
                 // just received something, check timer
                 clock_gettime(CLOCK_MONOTONIC, &end2);
                 diff2 = BILLION * (end2.tv_sec - start2.tv_sec) + end2.tv_nsec - start2.tv_nsec;
-                // fprintf(stderr, "diff2: %lld\n", diff2);
+                fprintf(stderr, "diff2: %lld\n", diff2);
                 if (diff2 > 50000000 && buffer[11] == 'd')
                 {
                     // probably lost cleint sending 3rd ack so
@@ -409,9 +413,12 @@ int main(int argc, char* argv[]) {
                         // send cmd
                         //fprintf(stderr, "planning on sending this bytes: %i : %s\n", tempBuffLen, tempBuff);
                         sendto(sockfd, (const char *) tempBuff, tempBuffLen, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
-                        fprintf(stderr, "sent: %s\n", header);
                         printf("RESEND %i %i\n", currentSeqNum, 0);
+                        fprintf(stderr, "send roundnum: %i\n", roundNum);
+                        lastSentSeq = currentSeqNum;
+                        lastRoundNum = roundNum;
                         currentSeqNum = currentSeqNum + contentLen;
+
                         if (currentSeqNum > 25600)
                         {
                             currentSeqNum = currentSeqNum - 25600;
@@ -425,7 +432,11 @@ int main(int argc, char* argv[]) {
                     fprintf(stderr, "timer is over .5 sec\n");
                     fprintf(stderr, "last seq, roundnum: %i %i\n", lastRecvSeq, roundNum);
                     // reposition file pointer
-                    fseek(fp,lastRecvSeq+roundNum*25600-number-1, SEEK_SET);
+                    // new
+                    // if (lastRoundNum < roundNum)
+                    //     fseek(fp,lastRecvSeq+(lastRoundNum)*25600-number-1, SEEK_SET);
+                    // else
+                        fseek(fp,lastRecvSeq+roundNum*25600-number-1, SEEK_SET);
                     // reset sequence number
                     currentSeqNum = lastRecvSeq;
                     printf("TIMEOUT %i\n", currentSeqNum);
@@ -458,8 +469,10 @@ int main(int argc, char* argv[]) {
                         // send cmd
                         //fprintf(stderr, "planning on sending this bytes: %i : %s\n", tempBuffLen, tempBuff);
                         sendto(sockfd, (const char *) tempBuff, tempBuffLen, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
-                        fprintf(stderr, "sent: %s\n", header);
                         printf("RESEND %i %i\n", currentSeqNum, 0);
+                                        fprintf(stderr, "send roundnum: %i\n", roundNum);
+                        lastSentSeq = currentSeqNum;
+                        lastRoundNum = roundNum;
                         currentSeqNum = currentSeqNum + contentLen;
                         if (currentSeqNum > 25600)
                         {
@@ -564,6 +577,9 @@ int main(int argc, char* argv[]) {
                         sendto(sockfd, (const char *) tempBuff, tempBuffLen, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
                     fprintf(stderr, "sent: %s\n", header);
                     printf("SEND %i %i\n", currentSeqNum, 0);
+                                    fprintf(stderr, "send roundnum: %i\n", roundNum);
+                    lastSentSeq = currentSeqNum;
+                    lastRoundNum = roundNum;
                     currentSeqNum = currentSeqNum + contentLen;
                     if (currentSeqNum > 25600)
                     {
@@ -571,7 +587,6 @@ int main(int argc, char* argv[]) {
                         roundNum++;
                     }
                     /// TIMER SHOULD BE PUT HERE TOO///
-                    clock_gettime(CLOCK_MONOTONIC, &start2);
                      ///// YOOYOYOYOYOYO //////
                 }
 
@@ -633,13 +648,17 @@ int main(int argc, char* argv[]) {
                         clock_gettime(CLOCK_MONOTONIC, &end2);
 
                         diff2 = BILLION * (end2.tv_sec - start2.tv_sec) + end2.tv_nsec - start2.tv_nsec;
-                        // fprintf(stderr, "diff2: %lld\n", diff2);
+                        fprintf(stderr, "diff2: %lld\n", diff2);
                         if (diff2 > 50000000 && buffer[11] == 'd')
                         {
                             // probably lost cleint sending 3rd ack so
                             fprintf(stderr, "DO I EVEN NEED THIS???\n");
                             fprintf(stderr, "prolly lost third ack so\n");
-                            fseek(fp,lastRecvSeq+roundNum*25600-number-1, SEEK_SET);
+                            // new
+                            // if (lastRoundNum < roundNum)
+                            //     fseek(fp,lastRecvSeq+(lastRoundNum)*25600-number-1, SEEK_SET);
+                            // else
+                                fseek(fp,lastRecvSeq+roundNum*25600-number-1, SEEK_SET);
                             // reset sequence number
                             currentSeqNum = lastRecvSeq;
                             printf("TIMEOUT %i\n", currentSeqNum);
@@ -672,8 +691,10 @@ int main(int argc, char* argv[]) {
                                 // send cmd
                                 //fprintf(stderr, "planning on sending this bytes: %i : %s\n", tempBuffLen, tempBuff);
                                 sendto(sockfd, (const char *) tempBuff, tempBuffLen, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
-                                fprintf(stderr, "sent: %s\n", header);
                                 printf("RESEND %i %i\n", currentSeqNum, 0);
+                                                fprintf(stderr, "send roundnum: %i\n", roundNum);
+                                lastSentSeq = currentSeqNum;
+                                lastRoundNum = roundNum;
                                 currentSeqNum = currentSeqNum + contentLen;
                                 if (currentSeqNum > 25600)
                                 {
@@ -689,7 +710,11 @@ int main(int argc, char* argv[]) {
                             fprintf(stderr, "timer is over .5 sec\n");
                             fprintf(stderr, "last ack, roundnum: %i %i\n", lastRecvSeq, roundNum);
                             // reposition file pointer
-                            fseek(fp,lastRecvSeq+roundNum*25600-number-1, SEEK_SET);
+                            // new
+                            // if (lastRoundNum < roundNum)
+                            //     fseek(fp,lastRecvSeq+(lastRoundNum)*25600-number-1, SEEK_SET);
+                            // else
+                                fseek(fp,lastRecvSeq+roundNum*25600-number-1, SEEK_SET);
                             // reset sequence number
                             currentSeqNum = lastRecvSeq;
                             printf("TIMEOUT %i\n", currentSeqNum);
@@ -722,8 +747,10 @@ int main(int argc, char* argv[]) {
                                 // send cmd
                                 //fprintf(stderr, "planning on sending this bytes: %i : %s\n", tempBuffLen, tempBuff);
                                 sendto(sockfd, (const char *) tempBuff, tempBuffLen, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
-                                fprintf(stderr, "sent: %s\n", header);
                                 printf("RESEND %i %i\n", currentSeqNum, 0);
+                                                fprintf(stderr, "send roundnum: %i\n", roundNum);
+                                lastSentSeq = currentSeqNum;
+                                lastRoundNum = roundNum;
                                 currentSeqNum = currentSeqNum + contentLen;
                                 if (currentSeqNum > 25600)
                                 {
@@ -801,8 +828,8 @@ int main(int argc, char* argv[]) {
                                 double hey = t2.tv_sec;
                                 fprintf(stderr, "t2: %g\n", hey);
                                 diff2 = BILLION * (end2.tv_sec - start2.tv_sec) + end2.tv_nsec - start2.tv_nsec;
-                                // fprintf(stderr, "end2: %ld\n", end2.tv_sec);
-                                // fprintf(stderr, "diff2: %lld\n", diff2);
+                                fprintf(stderr, "end2: %ld\n", end2.tv_sec);
+                                fprintf(stderr, "diff2: %lld\n", diff2);
                                 fprintf(stderr, "get seq num: %i\n", lastRecvSeq);
                                 if (llRecvSeqNumBool == 5)
                                 {
@@ -820,9 +847,11 @@ int main(int argc, char* argv[]) {
                                 if (diff2 > 50000000 && buffer[11] == 'd')
                                 {
                                     // probably lost cleint sending 3rd ack so
-                                    // verry new
                                     fprintf(stderr, "prolly lost third ack so\n");
-
+                                    // new
+                                    // if (lastRoundNum < roundNum)
+                                    //     fseek(fp,lastRecvSeq+(lastRoundNum)*25600-number-1, SEEK_SET);
+                                    // else
                                         fseek(fp,lastRecvSeq+roundNum*25600-number-1, SEEK_SET);
                                     // reset sequence number
                                     currentSeqNum = lastRecvSeq;
@@ -844,7 +873,7 @@ int main(int argc, char* argv[]) {
                                         tempBuffLen = contentLen + 12;
                                         bzero(header, 12);
                                         memcpy(header, makeHeader(currentSeqNum, 0, 'n'), 12);
-                                        // new way
+                                        //  way
                                         for (int i = 0; i < 12; i++)
                                         {
                                             tempBuff[i] = header[i];
@@ -854,10 +883,12 @@ int main(int argc, char* argv[]) {
                                             tempBuff[i+12] = content[i];
                                         }
                                         // send cmd
-                                        //fprintf(stderr, "planning on sending this bytes: %i : %s\n", tempBuffLen, tempBuff);
+                                        fprintf(stderr, "planning on sending this bytes: %i : %s\n", tempBuffLen, header);
                                         sendto(sockfd, (const char *) tempBuff, tempBuffLen, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
-                                        fprintf(stderr, "sent: %s\n", header);
                                         printf("RESEND %i %i\n", currentSeqNum, 0);
+                                                        fprintf(stderr, "send roundnum: %i\n", roundNum);
+                                        lastSentSeq = currentSeqNum;
+                                        lastRoundNum = roundNum;
                                         currentSeqNum = currentSeqNum + contentLen;
                                         if (currentSeqNum > 25600)
                                         {
@@ -874,13 +905,10 @@ int main(int argc, char* argv[]) {
                                     fprintf(stderr, "timer is over .5 sec\n");
                                     fprintf(stderr, "last seq, roundnum: %i %i\n", lastRecvSeq, roundNum);
                                     // reposition file pointer
-                                    // new new
-                                    int currentPos = ftell(fp);
-                                    fseek(fp,lastRecvSeq+roundNum*25600-number-1, SEEK_SET);
-                                    int potPos = ftell(fp);
-                                    if (potPos > currentPos)
-                                        fseek(fp,lastRecvSeq+(roundNum-1)*25600-number-1, SEEK_SET);
-                                    else
+                                    // new
+                                    // if (lastRoundNum < roundNum)
+                                    //     fseek(fp,lastRecvSeq+(lastRoundNum)*25600-number-1, SEEK_SET);
+                                    // else
                                         fseek(fp,lastRecvSeq+roundNum*25600-number-1, SEEK_SET);
                                     // reset sequence number
                                     currentSeqNum = lastRecvSeq;
@@ -897,6 +925,11 @@ int main(int argc, char* argv[]) {
                                         //fprintf(stderr, "more bytes to go boyz\n");
                                         bzero(content, 512);
                                         contentLen = fread(content, sizeof(char), 512, fp);
+                                        if (contentLen == 0)
+                                        {
+                                            fprintf(stderr, "wack bro\n");
+                                            break;
+                                        }
                                         //readIn+=contentLen;
                                         //fprintf(stderr, "second round: %i bytes: %s\n", contentLen, content);
                                         tempBuffLen = contentLen + 12;
@@ -912,10 +945,12 @@ int main(int argc, char* argv[]) {
                                             tempBuff[i+12] = content[i];
                                         }
                                         // send cmd
-                                        //fprintf(stderr, "planning on sending this bytes: %i : %s\n", tempBuffLen, tempBuff);
+                                        fprintf(stderr, "planning on sending this bytes: %i : %s\n", tempBuffLen, header);
                                         sendto(sockfd, (const char *) tempBuff, tempBuffLen, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
-                                        fprintf(stderr, "sent: %s\n", header);
                                         printf("RESEND %i %i\n", currentSeqNum, 0);
+                                                        fprintf(stderr, "send roundnum: %i\n", roundNum);
+                                        lastSentSeq = currentSeqNum;
+                                        lastRoundNum = roundNum;
                                         currentSeqNum = currentSeqNum + contentLen;
                                         if (currentSeqNum > 25600)
                                         {
@@ -927,13 +962,12 @@ int main(int argc, char* argv[]) {
                                 }
 
                                 // LOST PACKETN E;ASKDF
-                                if ( diff2 > 500000000 && (lastRecvSeq+roundNum*25600-number-2==wholeSize || lastRecvSeq+roundNum*25600-number-1==wholeSize)) //timeout, got ack to client's fin so lost server's fin
+                                if ( diff2 > 500000000 && (lastRecvSeq+roundNum*25600-number-2==wholeSize || lastRecvSeq+roundNum*25600-number-1==wholeSize ))//|| lastRecvSeq+roundNum*25600-number > wholeSize)) //timeout, got ack to client's fin so lost server's fin
                                 {
                                     bzero(header, 12);
                                     memcpy(header, makeHeader(currentSeqNum, 0, 'c'), 12);
                                     fprintf(stderr, "plan on sending header: %s\n", header);
                                     sendto(sockfd, (const char *) header, 12, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
-                                    fprintf(stderr, "sent: %s\n", header);
                                     // OG RESEND FIN
                                     printf("SEND %i 0 FIN\n", currentSeqNum);
                                     clock_gettime(CLOCK_MONOTONIC, &start2);
@@ -942,7 +976,7 @@ int main(int argc, char* argv[]) {
 
                             }
                             alreadySentFin = 0;
-                            fprintf(stderr, "get seq, number, rounds, wholesize: %i, %i, %i, %i\n", getSeq(buffer), number, roundNum, wholeSize);
+                            fprintf(stderr, "get seq, number, last round, rounds, wholesize: %i, %i, %i, %i, %i\n", getSeq(buffer), number, lastRoundNum,roundNum, wholeSize);
                             // if we receive the last ack, signal that all acks have been received
                             if (getSeq(buffer)+roundNum*25600 - number - 1 == wholeSize && resendFin == 0) // if everything received
                             {
@@ -952,7 +986,6 @@ int main(int argc, char* argv[]) {
                                 fprintf(stderr, "plan on sending header: %s\n", header);
                                 // simulate to lose fin
                                 sendto(sockfd, (const char *) header, 12, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
-                                fprintf(stderr, "sent: %s\n", header);
                                 printf("SEND %i 0 FIN\n", currentSeqNum);
                                 // reset timer
                                 clock_gettime(CLOCK_MONOTONIC, &start3);
@@ -964,7 +997,6 @@ int main(int argc, char* argv[]) {
 
                                 // simulate lose ack to fin
                                 sendto(sockfd, (const char *) finheader, 12, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
-                                fprintf(stderr, "sent: %s\n", header);
                                 clock_gettime(CLOCK_MONOTONIC, &start3);
                                 printf("%s", finack);
                                 clock_gettime(CLOCK_MONOTONIC, &end3);
@@ -984,6 +1016,7 @@ int main(int argc, char* argv[]) {
                                             lastRecvSeq = getSeq(buffer);
                                             lastRecvAck = getAck(buffer);
                                             fprintf(stderr, "DONE reading: %i\n", n);
+                                            fprintf(stderr, "received: %s\n", buffer);
                                             if (n < 0 )
                                             {
                                                 fprintf(stderr, "read error\n");
@@ -999,7 +1032,6 @@ int main(int argc, char* argv[]) {
                                             if (buffer[11] == 'c')//server sends second fin
                                             {
                                                 sendto(sockfd, (const char *) finheader, 12, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
-                                                fprintf(stderr, "sent: %s\n", header);
                                                 printf("%s", dupfinack);
                                                 clock_gettime(CLOCK_MONOTONIC, &start3);
                                             }

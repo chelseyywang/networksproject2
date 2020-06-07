@@ -45,7 +45,7 @@ def check_format(all_lines) -> bool:
             my_isn = int(result['seq'])
             print('Client ISN: ', my_isn)
             handshake_case1 = True
-            print('Handshake1 case: ', handshake_case1)
+            # print('Handshake1 case: ', handshake_case1)
 
         # RECV SYN ACK, get ISN
         # Test case: Server responses with SYN-ACK packet
@@ -53,23 +53,23 @@ def check_format(all_lines) -> bool:
             server_isn = int(result['seq'])
             print('Server ISN: ', server_isn)
             handshake_case2 = True
-            print('Handshake2 case: ', handshake_case2)
+            # print('Handshake2 case: ', handshake_case2)
 
         # SEND FIN
         # Test case: Client sends a FIN packet after transmitting a file
         if result['event'] == 'SEND' and result['fin_flag'] is not None:
             my_fin = int(result['seq'])
             fin_case1 = True
-            print('fin1 case: ', fin_case1)
+            # print('fin1 case: ', fin_case1)
 
         # RECV FIN
         # Test case: Server replies with a FIN packet after reciving the FIN
         if fin_case1 and result['event'] == 'RECV' and result['fin_flag'] is not None:
             server_fin = int(result['seq'])
             fin_case2 = True
-            print('fin2 case: ', fin_case2)
+            # print('fin2 case: ', fin_case2)
 
-    print('cases: ', handshake_case1, handshake_case2, fin_case1, fin_case2)
+    # print('cases: ', handshake_case1, handshake_case2, fin_case1, fin_case2)
 
     if handshake_case1 and handshake_case2 and fin_case1 and fin_case2:
         return True

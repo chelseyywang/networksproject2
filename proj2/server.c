@@ -53,7 +53,7 @@ int main(int argc, char* argv[]) {
         portNum = atoi(argv[1]);
     }
     // generate random
-    int randnumber = (rand() % (25600 - 0 + 1)) + 0;
+    int rnumber = (rand() % (25600 - 0 + 1)) + 0;
 
     int sockfd;
     char buffer[524] = {0};

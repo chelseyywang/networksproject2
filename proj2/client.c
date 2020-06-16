@@ -339,6 +339,27 @@ int main(int argc, char* argv[]) {
                                 printRecv(buffer);
                                 fprintf(stderr, "what i just read: %s\n", buffer);
                             }
+                        else if (currentSeqNum +25600*(roundNum-1) - number - 1 < wholeSize)
+                            {
+                                n = recvfrom(sockfd, (char *)buffer, MAXLINE, MSG_WAITALL, (struct sockaddr *) &servaddr, &len);
+                                lastlast = lastRecvSeq;
+                                lastRecvSeq = getSeq(buffer);
+                                lastlastAck = lastRecvAck;
+                                lastRecvAck = getAck(buffer);
+                                fprintf(stderr, "done reading2: %i\n", n);
+                                if (n < 0 )
+                                {
+                                    fprintf(stderr, "read error\n");
+                                    continue;
+                                }
+                                if (n == 0)
+                                {
+                                    fprintf(stderr, "got nothin\n");
+                                    continue;
+                                }
+                                printRecv(buffer);
+                                fprintf(stderr, "what i just read: %s\n", buffer);
+                            }
                             fprintf(stderr, "quien es?? \n");
 
                     }
@@ -376,7 +397,13 @@ int main(int argc, char* argv[]) {
                     // probably lost cleint sending 3rd ack so
                     fprintf(stderr, "waananna poll here\n");
                     fprintf(stderr, "prolly lost third ack so\n");
+                    int currentPos = ftell(fp);
                     fseek(fp,lastRecvSeq+roundNum*25600-number-1, SEEK_SET);
+                    int potPos = ftell(fp);
+                    if (potPos > currentPos)
+                        fseek(fp,lastRecvSeq+(roundNum-1)*25600-number-1, SEEK_SET);
+                    else
+                        fseek(fp,lastRecvSeq+roundNum*25600-number-1, SEEK_SET);
                     // reset sequence number
                     currentSeqNum = lastRecvSeq;
                     printf("TIMEOUT %i\n", currentSeqNum);
@@ -425,7 +452,13 @@ int main(int argc, char* argv[]) {
                     fprintf(stderr, "timer is over .5 sec\n");
                     fprintf(stderr, "last seq, roundnum: %i %i\n", lastRecvSeq, roundNum);
                     // reposition file pointer
+                    int currentPos = ftell(fp);
                     fseek(fp,lastRecvSeq+roundNum*25600-number-1, SEEK_SET);
+                    int potPos = ftell(fp);
+                    if (potPos > currentPos)
+                        fseek(fp,lastRecvSeq+(roundNum-1)*25600-number-1, SEEK_SET);
+                    else
+                        fseek(fp,lastRecvSeq+roundNum*25600-number-1, SEEK_SET);
                     // reset sequence number
                     currentSeqNum = lastRecvSeq;
                     printf("TIMEOUT %i\n", currentSeqNum);
@@ -639,7 +672,13 @@ int main(int argc, char* argv[]) {
                             // probably lost cleint sending 3rd ack so
                             fprintf(stderr, "DO I EVEN NEED THIS???\n");
                             fprintf(stderr, "prolly lost third ack so\n");
+                            int currentPos = ftell(fp);
                             fseek(fp,lastRecvSeq+roundNum*25600-number-1, SEEK_SET);
+                            int potPos = ftell(fp);
+                            if (potPos > currentPos)
+                                fseek(fp,lastRecvSeq+(roundNum-1)*25600-number-1, SEEK_SET);
+                            else
+                                fseek(fp,lastRecvSeq+roundNum*25600-number-1, SEEK_SET);
                             // reset sequence number
                             currentSeqNum = lastRecvSeq;
                             printf("TIMEOUT %i\n", currentSeqNum);
@@ -689,6 +728,12 @@ int main(int argc, char* argv[]) {
                             fprintf(stderr, "timer is over .5 sec\n");
                             fprintf(stderr, "last ack, roundnum: %i %i\n", lastRecvSeq, roundNum);
                             // reposition file pointer
+                            int currentPos = ftell(fp);
+                            fseek(fp,lastRecvSeq+roundNum*25600-number-1, SEEK_SET);
+                            int potPos = ftell(fp);
+                            if (potPos > currentPos)
+                                fseek(fp,lastRecvSeq+(roundNum-1)*25600-number-1, SEEK_SET);
+                            else
                             fseek(fp,lastRecvSeq+roundNum*25600-number-1, SEEK_SET);
                             // reset sequence number
                             currentSeqNum = lastRecvSeq;
@@ -822,7 +867,12 @@ int main(int argc, char* argv[]) {
                                     // probably lost cleint sending 3rd ack so
                                     // verry new
                                     fprintf(stderr, "prolly lost third ack so\n");
-
+                                    int currentPos = ftell(fp);
+                                    fseek(fp,lastRecvSeq+roundNum*25600-number-1, SEEK_SET);
+                                    int potPos = ftell(fp);
+                                    if (potPos > currentPos)
+                                        fseek(fp,lastRecvSeq+(roundNum-1)*25600-number-1, SEEK_SET);
+                                    else
                                         fseek(fp,lastRecvSeq+roundNum*25600-number-1, SEEK_SET);
                                     // reset sequence number
                                     currentSeqNum = lastRecvSeq;

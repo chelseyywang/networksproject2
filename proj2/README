@@ -20,7 +20,7 @@ ACK and resend out 10 new packets. On server side, to detect if I have dropped p
 it checks if the difference between received packet numbers is greater than 512.
 
 
-My Many Problems:
+Problems:
 
 I ran into many problems, with every line I typed. Even just setting up was so difficult.
 I have a Mac, so I had to download VirtualBox and get Ubuntu running. I thought I would just
@@ -52,10 +52,10 @@ completely break all of the code I worked for far, far too long on.
 Finally I was able to figure out it was because I needed to initialize a parameter in the recvfrom
 call. It was very strange because my code worked fine when I manually wrote my hostname, port number,
 file name but when I passed them in through a c-string it didn't work.
-Lastly, I tested it with tc. Unfortunately it sometimes works and sometimes doesn't. However I feel
-I have made more than enough progress on this project and spent far, far too many hours on this project
-to continue. I think I basically understand the point of the project and how I can implement things,
+I think I basically understand the point of the project and how I can implement things,
 and if I had to do it again, my code would be much, much simpler and cleaner.
+
+Grade: 100
 
 Tutorials:
 
